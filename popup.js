@@ -18,6 +18,23 @@ function setStatus(message, isError = false) {
   dom.status.style.color = isError ? '#c62828' : '#666';
 }
 
+function normalizePath(path) {
+  if (!path || !path.trim()) {
+    return '/';
+  }
+  return path.startsWith('/') ? path : `/${path}`;
+}
+
+function getCookieUrl({ protocol, domain, path }) {
+  return `${protocol}//${domain}${normalizePath(path)}`;
+}
+
+function getCookieRemovalUrl(cookie) {
+  const protocol = cookie.secure ? 'https:' : new URL(currentUrl).protocol;
+  const domain = cookie.domain.startsWith('.') ? cookie.domain.slice(1) : cookie.domain;
+  return getCookieUrl({ protocol, domain, path: cookie.path });
+}
+
 async function getCurrentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.url) {
@@ -75,7 +92,7 @@ function renderCookies(cookies) {
         original: cookie,
         name: nameInput.value,
         value: valueInput.value,
-        path: pathInput.value || '/'
+        path: pathInput.value
       });
     });
 
@@ -96,7 +113,7 @@ async function loadCookies() {
     currentDomain = tab.domain;
     dom.domainLabel.textContent = `Domain: ${currentDomain}`;
 
-    const cookies = await chrome.cookies.getAll({ domain: currentDomain });
+    const cookies = await chrome.cookies.getAll({ url: currentUrl });
     cookies.sort((a, b) => a.name.localeCompare(b.name));
     renderCookies(cookies);
     setStatus(`Loaded ${cookies.length} cookie(s).`);
@@ -109,38 +126,54 @@ async function loadCookies() {
 
 async function upsertCookie({ original, name, value, path }) {
   try {
-    if (!name.trim()) {
+    const trimmedName = name.trim();
+    if (!trimmedName) {
       throw new Error('Cookie name cannot be empty.');
     }
 
-    const cookieUrl = `${new URL(currentUrl).protocol}//${currentDomain}${path.startsWith('/') ? path : `/${path}`}`;
+    const normalizedPath = normalizePath(path);
+    const protocol = original?.secure ? 'https:' : new URL(currentUrl).protocol;
+    const domain = original?.domain
+      ? original.domain.startsWith('.')
+        ? original.domain.slice(1)
+        : original.domain
+      : currentDomain;
+    const cookieUrl = getCookieUrl({ protocol, domain, path: normalizedPath });
 
-    if (original && (original.name !== name || original.path !== path)) {
-      await chrome.cookies.remove({ url: currentUrl, name: original.name });
+    if (original && (original.name !== trimmedName || original.path !== normalizedPath)) {
+      await chrome.cookies.remove({
+        url: getCookieRemovalUrl(original),
+        name: original.name,
+        storeId: original.storeId
+      });
     }
 
     await chrome.cookies.set({
       url: cookieUrl,
-      name,
+      name: trimmedName,
       value,
-      path,
+      path: normalizedPath,
       secure: original?.secure ?? false,
       sameSite: original?.sameSite ?? 'lax',
-      expirationDate: original?.expirationDate
+      expirationDate: original?.expirationDate,
+      storeId: original?.storeId
     });
 
-    setStatus(`Saved cookie "${name}".`);
+    setStatus(`Saved cookie "${trimmedName}".`);
     await loadCookies();
+    return true;
   } catch (error) {
     setStatus(error.message, true);
+    return false;
   }
 }
 
 async function deleteCookie(cookie) {
   try {
     await chrome.cookies.remove({
-      url: `${new URL(currentUrl).protocol}//${currentDomain}${cookie.path}`,
-      name: cookie.name
+      url: getCookieRemovalUrl(cookie),
+      name: cookie.name,
+      storeId: cookie.storeId
     });
 
     setStatus(`Deleted cookie "${cookie.name}".`);
@@ -154,13 +187,16 @@ dom.refreshBtn.addEventListener('click', loadCookies);
 
 dom.addCookieForm.addEventListener('submit', async (event) => {
   event.preventDefault();
-  await upsertCookie({
+  const saved = await upsertCookie({
     name: dom.newName.value,
     value: dom.newValue.value,
-    path: dom.newPath.value || '/'
+    path: dom.newPath.value
   });
-  dom.addCookieForm.reset();
-  dom.newPath.value = '/';
+
+  if (saved) {
+    dom.addCookieForm.reset();
+    dom.newPath.value = '/';
+  }
 });
 
 loadCookies();
