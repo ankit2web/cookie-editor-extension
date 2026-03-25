@@ -195,7 +195,9 @@ async function upsertCookie({ original, name, value, path }) {
     };
 
     if (original) {
-      setDetails.domain = original.domain;
+      if (!original.hostOnly) {
+        setDetails.domain = original.domain;
+      }
       setDetails.httpOnly = original.httpOnly;
       setDetails.secure = original.secure;
       setDetails.sameSite = original.sameSite;
