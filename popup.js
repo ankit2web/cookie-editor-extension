@@ -243,23 +243,25 @@ async function deleteCookie(cookie) {
 }
 
 async function deleteAllCookies() {
-  if (allCookies.length === 0) {
-    setStatus('There are no cookies to delete.', true);
+  const visibleCookies = getFilteredCookies();
+
+  if (visibleCookies.length === 0) {
+    setStatus('There are no visible cookies to delete.', true);
     return;
   }
 
   const shouldDelete = window.confirm(
-    `Delete all ${allCookies.length} cookies shown for ${currentDomain}? This cannot be undone.`
+    `Delete all ${visibleCookies.length} cookies shown for ${currentDomain}? This cannot be undone.`
   );
 
   if (!shouldDelete) {
     return;
   }
 
-  setStatus(`Deleting ${allCookies.length} cookie(s)...`);
+  setStatus(`Deleting ${visibleCookies.length} cookie(s)...`);
 
   let deletedCount = 0;
-  for (const cookie of allCookies) {
+  for (const cookie of visibleCookies) {
     try {
       const deleted = await chrome.cookies.remove({
         url: getCookieRemovalUrl(cookie),
