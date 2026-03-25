@@ -40,6 +40,10 @@ function cookieToUrl({ domain, path, secure }) {
   return `${protocol}//${host}${normalizePath(path)}`;
 }
 
+function normalizeDomain(domain) {
+  return domain.startsWith('.') ? domain.slice(1) : domain;
+}
+
 async function getCurrentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.url) {
@@ -152,12 +156,15 @@ async function upsertCookie({ original, name, value, path }) {
       });
     }
 
+    const nextDomain = normalizeDomain(original?.domain ?? currentDomain);
+
     await chrome.cookies.set({
-      url: `${getCookieProtocol(original)}//${currentDomain}${normalizedPath}`,
+      url: `${getCookieProtocol(original)}//${nextDomain}${normalizedPath}`,
       name: trimmedName,
       value,
       path: normalizedPath,
       storeId: original?.storeId,
+      domain: original?.hostOnly ? undefined : original?.domain,
       secure: original?.secure ?? false,
       httpOnly: original?.httpOnly ?? false,
       sameSite: original?.sameSite ?? 'lax',
