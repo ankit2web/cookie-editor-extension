@@ -133,12 +133,20 @@ async function upsertCookie({ original, name, value, path }) {
 
     const normalizedPath = normalizePath(path);
     const protocol = original?.secure ? 'https:' : new URL(currentUrl).protocol;
-    const domain = original?.domain
-      ? original.domain.startsWith('.')
-        ? original.domain.slice(1)
-        : original.domain
-      : currentDomain;
-    const cookieUrl = getCookieUrl({ protocol, domain, path: normalizedPath });
+    let domainForUrl = currentDomain;
+
+    if (original?.domain) {
+      if (original.domain.startsWith('.')) {
+        const scopedDomain = original.domain.slice(1);
+        domainForUrl = currentDomain === scopedDomain || currentDomain.endsWith(`.${scopedDomain}`)
+          ? currentDomain
+          : scopedDomain;
+      } else {
+        domainForUrl = original.domain;
+      }
+    }
+
+    const cookieUrl = getCookieUrl({ protocol, domain: domainForUrl, path: normalizedPath });
 
     if (original && (original.name !== trimmedName || original.path !== normalizedPath)) {
       await chrome.cookies.remove({
