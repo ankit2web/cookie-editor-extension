@@ -66,11 +66,25 @@ button {
   cursor: pointer;
 }
 
+button.danger {
+  border-color: #c62828;
+  color: #c62828;
+}
+
 .row-between {
   display: flex;
   justify-content: space-between;
   align-items: center;
   gap: 8px;
+}
+
+.actions-inline {
+  display: flex;
+  gap: 8px;
+}
+
+.search-label {
+  margin-top: 8px;
 }
 
 .cookie-list {

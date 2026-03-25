@@ -3,6 +3,8 @@ const dom = {
   status: document.getElementById('status'),
   cookieList: document.getElementById('cookieList'),
   refreshBtn: document.getElementById('refreshBtn'),
+  deleteAllBtn: document.getElementById('deleteAllBtn'),
+  searchInput: document.getElementById('searchInput'),
   addCookieForm: document.getElementById('addCookieForm'),
   newName: document.getElementById('newName'),
   newValue: document.getElementById('newValue'),
@@ -12,6 +14,8 @@ const dom = {
 
 let currentUrl = '';
 let currentDomain = '';
+let currentStoreId = '';
+let allCookies = [];
 
 function setStatus(message, isError = false) {
   dom.status.textContent = message;
@@ -35,6 +39,30 @@ function getCookieRemovalUrl(cookie) {
   return getCookieUrl({ protocol, domain, path: cookie.path });
 }
 
+function getCookieSearchText(cookie) {
+  return `${cookie.name} ${cookie.value} ${cookie.path} ${cookie.domain}`.toLowerCase();
+}
+
+function isCookieForActiveHost(cookie, activeHost) {
+  const host = activeHost.toLowerCase();
+  const cookieDomain = cookie.domain.replace(/^\./, '').toLowerCase();
+
+  if (cookie.hostOnly) {
+    return cookieDomain === host;
+  }
+
+  return host === cookieDomain || host.endsWith(`.${cookieDomain}`);
+}
+
+function getFilteredCookies() {
+  const query = dom.searchInput.value.trim().toLowerCase();
+  if (!query) {
+    return allCookies;
+  }
+
+  return allCookies.filter((cookie) => getCookieSearchText(cookie).includes(query));
+}
+
 async function getCurrentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
   if (!tab || !tab.url) {
@@ -46,7 +74,7 @@ async function getCurrentTab() {
     throw new Error('This extension only supports http/https pages.');
   }
 
-  return { url: tab.url, domain: url.hostname };
+  return { url: tab.url, domain: url.hostname, cookieStoreId: tab.cookieStoreId || undefined };
 }
 
 function formatCookieMeta(cookie) {
@@ -67,7 +95,9 @@ function renderCookies(cookies) {
 
   if (cookies.length === 0) {
     const item = document.createElement('li');
-    item.textContent = 'No cookies found for this domain.';
+    item.textContent = allCookies.length === 0
+      ? 'No cookies found for this domain.'
+      : 'No cookies match your search.';
     dom.cookieList.appendChild(item);
     return;
   }
@@ -100,7 +130,7 @@ function renderCookies(cookies) {
       await deleteCookie(cookie);
     });
 
-    item.dataset.cookieKey = `${cookie.name}|${cookie.path}`;
+    item.dataset.cookieKey = `${cookie.storeId}|${cookie.domain}|${cookie.name}|${cookie.path}`;
     dom.cookieList.appendChild(fragment);
   }
 }
@@ -111,13 +141,28 @@ async function loadCookies() {
     const tab = await getCurrentTab();
     currentUrl = tab.url;
     currentDomain = tab.domain;
+    currentStoreId = tab.cookieStoreId || '';
     dom.domainLabel.textContent = `Domain: ${currentDomain}`;
 
-    const cookies = await chrome.cookies.getAll({ url: currentUrl });
-    cookies.sort((a, b) => a.name.localeCompare(b.name));
-    renderCookies(cookies);
-    setStatus(`Loaded ${cookies.length} cookie(s).`);
+    const query = {};
+    if (currentStoreId) {
+      query.storeId = currentStoreId;
+    }
+
+    // We intentionally avoid the `domain` query param because it can include deeper
+    // subdomain cookies for the current host (e.g. api.app.example.com while on
+    // app.example.com). Host scoping is enforced below via isCookieForActiveHost.
+    const cookies = await chrome.cookies.getAll(query);
+    const hostScopedCookies = cookies.filter((cookie) => isCookieForActiveHost(cookie, currentDomain));
+    hostScopedCookies.sort((a, b) => {
+      const byName = a.name.localeCompare(b.name);
+      return byName === 0 ? a.path.localeCompare(b.path) : byName;
+    });
+    allCookies = hostScopedCookies;
+    renderCookies(getFilteredCookies());
+    setStatus(`Loaded ${hostScopedCookies.length} cookie(s).`);
   } catch (error) {
+    allCookies = [];
     renderCookies([]);
     dom.domainLabel.textContent = 'Unable to determine current domain.';
     setStatus(error.message, true);
@@ -160,16 +205,18 @@ async function upsertCookie({ original, name, value, path }) {
       url: cookieUrl,
       name: trimmedName,
       value,
-      path: normalizedPath
+      path: normalizedPath,
+      storeId: original?.storeId || currentStoreId || undefined
     };
 
     if (original) {
-      setDetails.domain = original.domain;
+      if (!original.hostOnly) {
+        setDetails.domain = original.domain;
+      }
       setDetails.httpOnly = original.httpOnly;
       setDetails.secure = original.secure;
       setDetails.sameSite = original.sameSite;
       setDetails.expirationDate = original.expirationDate;
-      setDetails.storeId = original.storeId;
     }
 
     await chrome.cookies.set(setDetails);
@@ -198,7 +245,49 @@ async function deleteCookie(cookie) {
   }
 }
 
+async function deleteAllCookies() {
+  const visibleCookies = getFilteredCookies();
+
+  if (visibleCookies.length === 0) {
+    setStatus('There are no visible cookies to delete.', true);
+    return;
+  }
+
+  const shouldDelete = window.confirm(
+    `Delete all ${visibleCookies.length} cookies shown for ${currentDomain}? This cannot be undone.`
+  );
+
+  if (!shouldDelete) {
+    return;
+  }
+
+  setStatus(`Deleting ${visibleCookies.length} cookie(s)...`);
+
+  let deletedCount = 0;
+  for (const cookie of visibleCookies) {
+    try {
+      const deleted = await chrome.cookies.remove({
+        url: getCookieRemovalUrl(cookie),
+        name: cookie.name,
+        storeId: cookie.storeId
+      });
+      if (deleted) {
+        deletedCount += 1;
+      }
+    } catch (_error) {
+      // Continue deleting remaining cookies even if one fails.
+    }
+  }
+
+  setStatus(`Deleted ${deletedCount} cookie(s).`);
+  await loadCookies();
+}
+
 dom.refreshBtn.addEventListener('click', loadCookies);
+dom.deleteAllBtn.addEventListener('click', deleteAllCookies);
+dom.searchInput.addEventListener('input', () => {
+  renderCookies(getFilteredCookies());
+});
 
 dom.addCookieForm.addEventListener('submit', async (event) => {
   event.preventDefault();
