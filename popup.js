@@ -148,16 +148,23 @@ async function upsertCookie({ original, name, value, path }) {
       });
     }
 
-    await chrome.cookies.set({
+    const setDetails = {
       url: cookieUrl,
       name: trimmedName,
       value,
-      path: normalizedPath,
-      secure: original?.secure ?? false,
-      sameSite: original?.sameSite ?? 'lax',
-      expirationDate: original?.expirationDate,
-      storeId: original?.storeId
-    });
+      path: normalizedPath
+    };
+
+    if (original) {
+      setDetails.domain = original.domain;
+      setDetails.httpOnly = original.httpOnly;
+      setDetails.secure = original.secure;
+      setDetails.sameSite = original.sameSite;
+      setDetails.expirationDate = original.expirationDate;
+      setDetails.storeId = original.storeId;
+    }
+
+    await chrome.cookies.set(setDetails);
 
     setStatus(`Saved cookie "${trimmedName}".`);
     await loadCookies();
