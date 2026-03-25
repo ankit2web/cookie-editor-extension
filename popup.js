@@ -144,11 +144,14 @@ async function loadCookies() {
     currentStoreId = tab.cookieStoreId || '';
     dom.domainLabel.textContent = `Domain: ${currentDomain}`;
 
-    const query = { domain: currentDomain };
+    const query = {};
     if (currentStoreId) {
       query.storeId = currentStoreId;
     }
 
+    // We intentionally avoid the `domain` query param because it can include deeper
+    // subdomain cookies for the current host (e.g. api.app.example.com while on
+    // app.example.com). Host scoping is enforced below via isCookieForActiveHost.
     const cookies = await chrome.cookies.getAll(query);
     const hostScopedCookies = cookies.filter((cookie) => isCookieForActiveHost(cookie, currentDomain));
     hostScopedCookies.sort((a, b) => {
