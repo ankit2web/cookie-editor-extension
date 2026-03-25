@@ -1,0 +1,71 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Cookie Editor</title>
+    <link rel="stylesheet" href="popup.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <h1>Cookie Editor</h1>
+        <p id="domainLabel" class="domain-label">Loading current tab...</p>
+      </header>
+
+      <section class="new-cookie">
+        <h2>Add Cookie</h2>
+        <form id="addCookieForm">
+          <label>
+            Name
+            <input id="newName" name="name" required />
+          </label>
+          <label>
+            Value
+            <input id="newValue" name="value" required />
+          </label>
+          <label>
+            Path
+            <input id="newPath" name="path" value="/" />
+          </label>
+          <button type="submit">Add Cookie</button>
+        </form>
+      </section>
+
+      <section class="cookie-list-section">
+        <div class="row-between">
+          <h2>Cookies</h2>
+          <button id="refreshBtn" type="button">Refresh</button>
+        </div>
+        <p id="status" class="status"></p>
+        <ul id="cookieList" class="cookie-list"></ul>
+      </section>
+    </main>
+
+    <template id="cookieItemTemplate">
+      <li class="cookie-item">
+        <div class="cookie-main">
+          <label>
+            Name
+            <input class="cookie-name" />
+          </label>
+          <label>
+            Value
+            <textarea class="cookie-value" rows="2"></textarea>
+          </label>
+          <label>
+            Path
+            <input class="cookie-path" />
+          </label>
+        </div>
+        <div class="cookie-meta"></div>
+        <div class="cookie-actions">
+          <button class="save-btn" type="button">Save</button>
+          <button class="delete-btn" type="button">Delete</button>
+        </div>
+      </li>
+    </template>
+
+    <script src="popup.js"></script>
+  </body>
+</html>
