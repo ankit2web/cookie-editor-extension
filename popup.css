@@ -1,0 +1,102 @@
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  margin: 0;
+  min-width: 420px;
+  font-family: Arial, sans-serif;
+}
+
+.app {
+  padding: 12px;
+  display: grid;
+  gap: 12px;
+}
+
+h1,
+h2 {
+  margin: 0;
+}
+
+h1 {
+  font-size: 18px;
+}
+
+h2 {
+  font-size: 14px;
+}
+
+.domain-label,
+.status {
+  margin: 4px 0 0;
+  font-size: 12px;
+  color: #666;
+}
+
+.new-cookie form,
+.cookie-main {
+  display: grid;
+  gap: 8px;
+}
+
+label {
+  display: grid;
+  gap: 4px;
+  font-size: 12px;
+}
+
+input,
+textarea,
+button {
+  font: inherit;
+}
+
+input,
+textarea {
+  padding: 6px;
+  border: 1px solid #bbb;
+  border-radius: 4px;
+}
+
+button {
+  border: 1px solid #888;
+  border-radius: 4px;
+  padding: 6px 8px;
+  cursor: pointer;
+}
+
+.row-between {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 8px;
+}
+
+.cookie-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: 12px;
+  max-height: 420px;
+  overflow-y: auto;
+}
+
+.cookie-item {
+  border: 1px solid #999;
+  border-radius: 6px;
+  padding: 8px;
+  display: grid;
+  gap: 8px;
+}
+
+.cookie-meta {
+  font-size: 11px;
+  color: #666;
+}
+
+.cookie-actions {
+  display: flex;
+  gap: 8px;
+}
