@@ -4,7 +4,7 @@ A lightweight Chrome Extension (Manifest V3) for viewing, editing, creating, and
 
 ## Features
 
-- View all cookies for the current tab domain (across all cookie paths)
+- View cookies for the current tab host context (across all cookie paths, excluding deeper subdomains)
 - Edit cookie name, value, and path
 - Create new cookies (including empty-value cookies)
 - Delete existing cookies

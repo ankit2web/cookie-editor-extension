@@ -43,6 +43,17 @@ function getCookieSearchText(cookie) {
   return `${cookie.name} ${cookie.value} ${cookie.path} ${cookie.domain}`.toLowerCase();
 }
 
+function isCookieForActiveHost(cookie, activeHost) {
+  const host = activeHost.toLowerCase();
+  const cookieDomain = cookie.domain.replace(/^\./, '').toLowerCase();
+
+  if (cookie.hostOnly) {
+    return cookieDomain === host;
+  }
+
+  return host === cookieDomain || host.endsWith(`.${cookieDomain}`);
+}
+
 function getFilteredCookies() {
   const query = dom.searchInput.value.trim().toLowerCase();
   if (!query) {
@@ -139,13 +150,14 @@ async function loadCookies() {
     }
 
     const cookies = await chrome.cookies.getAll(query);
-    cookies.sort((a, b) => {
+    const hostScopedCookies = cookies.filter((cookie) => isCookieForActiveHost(cookie, currentDomain));
+    hostScopedCookies.sort((a, b) => {
       const byName = a.name.localeCompare(b.name);
       return byName === 0 ? a.path.localeCompare(b.path) : byName;
     });
-    allCookies = cookies;
+    allCookies = hostScopedCookies;
     renderCookies(getFilteredCookies());
-    setStatus(`Loaded ${cookies.length} cookie(s).`);
+    setStatus(`Loaded ${hostScopedCookies.length} cookie(s).`);
   } catch (error) {
     allCookies = [];
     renderCookies([]);
