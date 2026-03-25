@@ -4,10 +4,12 @@ A lightweight Chrome Extension (Manifest V3) for viewing, editing, creating, and
 
 ## Features
 
-- View all cookies for the current tab domain
+- View all cookies for the current tab domain (across all cookie paths)
 - Edit cookie name, value, and path
-- Create new cookies
+- Create new cookies (including empty-value cookies)
 - Delete existing cookies
+- Filter cookies by name, value, path, or domain with instant search
+- Delete all currently listed cookies with one confirmation flow
 - Refresh cookie list on demand
 
 ## Installation (Developer Mode)
@@ -22,3 +24,4 @@ A lightweight Chrome Extension (Manifest V3) for viewing, editing, creating, and
 
 - This extension works on `http://` and `https://` tabs.
 - Cookie behavior still follows browser security rules (e.g. host/path restrictions, secure contexts).
+- Cookies are read/written in the active tab's cookie store to support regular and incognito windows separately.

@@ -22,7 +22,7 @@
           </label>
           <label>
             Value
-            <input id="newValue" name="value" required />
+            <input id="newValue" name="value" />
           </label>
           <label>
             Path
@@ -35,8 +35,15 @@
       <section class="cookie-list-section">
         <div class="row-between">
           <h2>Cookies</h2>
-          <button id="refreshBtn" type="button">Refresh</button>
+          <div class="actions-inline">
+            <button id="deleteAllBtn" type="button" class="danger">Delete All</button>
+            <button id="refreshBtn" type="button">Refresh</button>
+          </div>
         </div>
+        <label class="search-label" for="searchInput">
+          Search
+          <input id="searchInput" type="search" placeholder="Filter by name, value, or path" />
+        </label>
         <p id="status" class="status"></p>
         <ul id="cookieList" class="cookie-list"></ul>
       </section>
