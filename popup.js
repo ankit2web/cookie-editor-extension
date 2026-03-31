@@ -4,6 +4,9 @@ const dom = {
   cookieList: document.getElementById('cookieList'),
   refreshBtn: document.getElementById('refreshBtn'),
   deleteAllBtn: document.getElementById('deleteAllBtn'),
+  exportJsonBtn: document.getElementById('exportJsonBtn'),
+  importJsonBtn: document.getElementById('importJsonBtn'),
+  jsonTextarea: document.getElementById('jsonTextarea'),
   searchInput: document.getElementById('searchInput'),
   addCookieForm: document.getElementById('addCookieForm'),
   newName: document.getElementById('newName'),
@@ -61,6 +64,33 @@ function getFilteredCookies() {
   }
 
   return allCookies.filter((cookie) => getCookieSearchText(cookie).includes(query));
+}
+
+function toExportableCookie(cookie) {
+  return {
+    name: cookie.name,
+    value: cookie.value,
+    domain: cookie.domain,
+    path: cookie.path,
+    secure: cookie.secure,
+    httpOnly: cookie.httpOnly,
+    sameSite: cookie.sameSite,
+    hostOnly: cookie.hostOnly,
+    session: cookie.session,
+    expirationDate: cookie.expirationDate
+  };
+}
+
+function getImportCookieList(parsedJson) {
+  if (Array.isArray(parsedJson)) {
+    return parsedJson;
+  }
+
+  if (parsedJson && typeof parsedJson === 'object' && Array.isArray(parsedJson.cookies)) {
+    return parsedJson.cookies;
+  }
+
+  throw new Error('JSON must be an array of cookies or an object containing a "cookies" array.');
 }
 
 async function getCurrentTab() {
@@ -283,8 +313,96 @@ async function deleteAllCookies() {
   await loadCookies();
 }
 
+async function exportCookiesAsJsonText() {
+  if (allCookies.length === 0) {
+    setStatus('No cookies available to export for this domain.', true);
+    return;
+  }
+
+  const exportPayload = {
+    domain: currentDomain,
+    exportedAt: new Date().toISOString(),
+    cookies: allCookies.map(toExportableCookie)
+  };
+
+  dom.jsonTextarea.value = JSON.stringify(exportPayload, null, 2);
+  dom.jsonTextarea.focus();
+  dom.jsonTextarea.select();
+  setStatus(`Exported ${allCookies.length} cookie(s) to JSON text.`);
+}
+
+async function importCookiesFromJsonText() {
+  try {
+    const rawText = dom.jsonTextarea.value.trim();
+    if (!rawText) {
+      throw new Error('Paste JSON text before importing.');
+    }
+
+    const parsedJson = JSON.parse(rawText);
+    const cookiesToImport = getImportCookieList(parsedJson);
+    if (cookiesToImport.length === 0) {
+      throw new Error('JSON contains no cookies to import.');
+    }
+
+    setStatus(`Importing ${cookiesToImport.length} cookie(s)...`);
+
+    let importedCount = 0;
+    for (const cookie of cookiesToImport) {
+      if (!cookie || typeof cookie !== 'object') {
+        continue;
+      }
+
+      const name = typeof cookie.name === 'string' ? cookie.name.trim() : '';
+      if (!name) {
+        continue;
+      }
+
+      const value = cookie.value == null ? '' : String(cookie.value);
+      const path = normalizePath(typeof cookie.path === 'string' ? cookie.path : '/');
+      const sourceDomain = typeof cookie.domain === 'string' && cookie.domain.trim()
+        ? cookie.domain.trim()
+        : currentDomain;
+      const originalForUpsert = {
+        name,
+        path,
+        secure: Boolean(cookie.secure),
+        httpOnly: Boolean(cookie.httpOnly),
+        sameSite: typeof cookie.sameSite === 'string' ? cookie.sameSite : undefined,
+        expirationDate: typeof cookie.expirationDate === 'number' && Number.isFinite(cookie.expirationDate)
+          ? cookie.expirationDate
+          : undefined,
+        hostOnly: Boolean(cookie.hostOnly),
+        domain: sourceDomain,
+        storeId: currentStoreId || undefined
+      };
+
+      const saved = await upsertCookie({
+        original: originalForUpsert,
+        name,
+        value,
+        path
+      });
+
+      if (saved) {
+        importedCount += 1;
+      }
+    }
+
+    if (importedCount === 0) {
+      throw new Error('No valid cookies were found in the provided JSON.');
+    }
+
+    setStatus(`Imported ${importedCount} cookie(s).`);
+    await loadCookies();
+  } catch (error) {
+    setStatus(error.message, true);
+  }
+}
+
 dom.refreshBtn.addEventListener('click', loadCookies);
 dom.deleteAllBtn.addEventListener('click', deleteAllCookies);
+dom.exportJsonBtn.addEventListener('click', exportCookiesAsJsonText);
+dom.importJsonBtn.addEventListener('click', importCookiesFromJsonText);
 dom.searchInput.addEventListener('input', () => {
   renderCookies(getFilteredCookies());
 });

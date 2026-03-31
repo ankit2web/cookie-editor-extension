@@ -47,6 +47,23 @@
         <p id="status" class="status"></p>
         <ul id="cookieList" class="cookie-list"></ul>
       </section>
+
+      <section class="json-tools">
+        <h2>JSON Import / Export</h2>
+        <div class="actions-inline">
+          <button id="exportJsonBtn" type="button">Export Cookies as JSON</button>
+          <button id="importJsonBtn" type="button">Import Cookies from JSON</button>
+        </div>
+        <label for="jsonTextarea">
+          JSON Text
+          <textarea
+            id="jsonTextarea"
+            class="json-textarea"
+            rows="8"
+            placeholder='Paste JSON here. Supported formats: [{"name":"key","value":"value","path":"/"}] or {"cookies":[...]}'
+          ></textarea>
+        </label>
+      </section>
     </main>
 
     <template id="cookieItemTemplate">
