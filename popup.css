@@ -114,3 +114,13 @@ button.danger {
   display: flex;
   gap: 8px;
 }
+
+.json-tools {
+  display: grid;
+  gap: 8px;
+}
+
+.json-textarea {
+  resize: vertical;
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace;
+}
