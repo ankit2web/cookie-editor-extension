@@ -1,14 +1,15 @@
 {
   "manifest_version": 3,
   "name": "CookieEdit++",
-  "version": "1.0.0",
+  "version": "1.0.1",
   "description": "View, edit, create, and delete cookies for the current tab domain.",
   "permissions": [
     "cookies",
-    "tabs",
-    "activeTab"
+    "activeTab",
+    "storage"
   ],
-  "host_permissions": [
+  "host_permissions": [],
+  "optional_host_permissions": [
     "<all_urls>"
   ],
   "action": {
