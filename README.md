@@ -25,3 +25,19 @@ A lightweight Chrome Extension (Manifest V3) for viewing, editing, creating, and
 - This extension works on `http://` and `https://` tabs.
 - Cookie behavior still follows browser security rules (e.g. host/path restrictions, secure contexts).
 - Cookies are read/written in the active tab's cookie store to support regular and incognito windows separately.
+
+## Store publishing CI/CD
+
+This repository includes a GitHub Actions workflow at `.github/workflows/publish-extension.yml` that validates `manifest.json`, packages the extension once, and publishes that same package to both Microsoft Edge Add-ons and Mozilla Add-ons.
+
+The workflow runs when a GitHub Release is published, and it can also be started manually from the **Actions** tab with `workflow_dispatch`.
+
+Configure these repository secrets before publishing:
+
+- `EDGE_PRODUCT_ID` — Microsoft Edge Add-ons product ID for an existing listing.
+- `EDGE_API_KEY` — Microsoft Edge Add-ons API key.
+- `EDGE_CLIENT_ID` — Microsoft Edge Add-ons API client ID.
+- `AMO_SIGN_KEY` — Mozilla Add-ons API key/issuer.
+- `AMO_SIGN_SECRET` — Mozilla Add-ons API secret.
+
+The Edge publishing action updates an existing Edge Add-ons listing. Create the first listing manually in Partner Center, then use this workflow for subsequent releases.
