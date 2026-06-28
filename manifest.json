@@ -13,7 +13,13 @@
   ],
   "action": {
     "default_popup": "popup.html",
-    "default_title": "CookieEdit++"
+    "default_title": "CookieEdit++",
+    "default_icon": {
+      "16": "icons/cookieedit.svg",
+      "32": "icons/cookieedit.svg",
+      "48": "icons/cookieedit.svg",
+      "128": "icons/cookieedit.svg"
+    }
   },
   "browser_specific_settings": {
     "gecko": {
@@ -27,5 +33,11 @@
         "can_be_disabled": true
       }
     }
+  },
+  "icons": {
+    "16": "icons/cookieedit.svg",
+    "32": "icons/cookieedit.svg",
+    "48": "icons/cookieedit.svg",
+    "128": "icons/cookieedit.svg"
   }
 }

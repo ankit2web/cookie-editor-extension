@@ -1,0 +1,87 @@
+name: Publish browser extension
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-extension-${{ github.ref }}
+  cancel-in-progress: false
+
+env:
+  EXTENSION_PACKAGE: cookieedit-plus-plus.zip
+
+jobs:
+  package:
+    name: Validate and package
+    runs-on: ubuntu-latest
+    outputs:
+      artifact-name: extension-package
+      package-name: ${{ env.EXTENSION_PACKAGE }}
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate manifest JSON
+        run: python -m json.tool manifest.json > /tmp/manifest.json
+
+      - name: Package extension zip
+        run: |
+          zip -r "$EXTENSION_PACKAGE" \
+            manifest.json \
+            popup.html \
+            popup.css \
+            popup.js \
+            icons
+
+      - name: Upload package artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: extension-package
+          path: ${{ env.EXTENSION_PACKAGE }}
+          if-no-files-found: error
+
+  publish-edge:
+    name: Publish to Microsoft Edge Add-ons
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package.outputs.artifact-name }}
+
+      - name: Publish Edge add-on
+        uses: wdzeng/edge-addon@v2
+        with:
+          product-id: ${{ secrets.EDGE_PRODUCT_ID }}
+          zip-path: ${{ needs.package.outputs.package-name }}
+          api-key: ${{ secrets.EDGE_API_KEY }}
+          client-id: ${{ secrets.EDGE_CLIENT_ID }}
+
+  publish-firefox:
+    name: Publish to Mozilla Add-ons
+    needs: package
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package.outputs.artifact-name }}
+
+      - name: Submit Firefox add-on to AMO
+        uses: kewisch/action-web-ext@v2
+        with:
+          cmd: sign
+          source: ${{ needs.package.outputs.package-name }}
+          channel: listed
+          apiKey: ${{ secrets.AMO_SIGN_KEY }}
+          apiSecret: ${{ secrets.AMO_SIGN_SECRET }}
+          approvalTimeout: 0
