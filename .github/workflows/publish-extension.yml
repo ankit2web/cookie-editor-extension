@@ -40,9 +40,10 @@ jobs:
         run: |
           VERSION=$(jq -r '.version // empty' manifest.json)
           
-          # Fail fast if version is blank or null to prevent corrupting tags
-          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
-            echo "::error::Invalid or missing version in manifest.json"
+          # Strict SemVer regex validation to eliminate shell injections or malformed outputs
+          SEMVER_REGEX="^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$"
+          if [[ ! "$VERSION" =~ $SEMVER_REGEX ]]; then
+            echo "::error::Version '$VERSION' is missing or does not match a strict SemVer format."
             exit 1
           fi
           
@@ -50,19 +51,27 @@ jobs:
 
       - name: Check if version changed
         id: check-version
+        env:
+          # Securely map the validated output token to an environment variable instead of using raw string interpolation
+          NEW_VERSION: ${{ steps.get-version.outputs.version }}
         run: |
-          if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ] || [ -z "${{ github.event.before }}" ]; then
-            echo "No previous commit context available (dispatch/new branch). Assuming version changed."
+          # 1. If manually triggered via workflow_dispatch, treat it as explicit opt-in to publish
+          if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
+            echo "Manual workflow dispatch detected. Force publishing enabled."
             echo "changed=true" >> $GITHUB_OUTPUT
+            
+          # 2. If it's a push event but has no baseline (e.g. brand new branch), DO NOT auto-publish
+          elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ] || [ -z "${{ github.event.before }}" ]; then
+            echo "No historic push baseline available for this branch. Skipping auto-publication to avoid duplicates."
+            echo "changed=false" >> $GITHUB_OUTPUT
+            
+          # 3. Standard push event with a verifiable baseline history
           else
             echo "Fetching the pre-push base commit: ${{ github.event.before }}"
             git fetch origin ${{ github.event.before }} --depth=1
 
-            # Safely fetch old version context from base commit range
+            # Safely grab the baseline file content context
             OLD_VERSION=$(git show ${{ github.event.before }}:manifest.json | jq -r '.version // "none"' 2>/dev/null || echo "none")
-            
-            # Reuse the strictly validated output version from the previous step
-            NEW_VERSION="${{ steps.get-version.outputs.version }}"
             
             if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
               echo "Version changed from $OLD_VERSION to $NEW_VERSION. Proceeding with release."
@@ -96,7 +105,6 @@ jobs:
     needs: package
     if: needs.package.outputs.version-changed == 'true'
     runs-on: ubuntu-latest
-    # Elevate contents permission strictly where needed to cut off top-level risk
     permissions:
       contents: write
     outputs:
