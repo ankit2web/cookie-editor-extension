@@ -45,11 +45,15 @@ jobs:
       - name: Check if version changed
         id: check-version
         run: |
-          # Fallback check if it's a workflow_dispatch or first push
+          # Fallback check if it's a workflow_dispatch or a brand new branch push
           if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ] || [ -z "${{ github.event.before }}" ]; then
             echo "No previous commit context available (dispatch/new branch). Assuming version changed."
             echo "changed=true" >> $GITHUB_OUTPUT
           else
+            # Explicitly fetch the exact pre-push SHA so Git definitely knows about it
+            echo "Fetching the pre-push base commit: ${{ github.event.before }}"
+            git fetch origin ${{ github.event.before }} --depth=1
+
             # Extract version from before the entire multi-commit push
             OLD_VERSION=$(git show ${{ github.event.before }}:manifest.json | jq -r '.version' || echo "none")
             NEW_VERSION=$(jq -r '.version' manifest.json)
@@ -62,7 +66,6 @@ jobs:
               echo "changed=false" >> $GITHUB_OUTPUT
             fi
           fi
-
       - name: Package extension zip
         if: steps.check-version.outputs.changed == 'true'
         run: |
