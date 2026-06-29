@@ -1,12 +1,15 @@
 name: Publish browser extension
 
 on:
-  release:
-    types: [published]
+  push:
+    branches:
+      - main # Change to master if needed
+    paths:
+      - 'manifest.json'
   workflow_dispatch:
 
 permissions:
-  contents: read
+  contents: write # Required to create a GitHub Release
 
 concurrency:
   group: publish-extension-${{ github.ref }}
@@ -17,19 +20,45 @@ env:
 
 jobs:
   package:
-    name: Validate and package
+    name: Validate, Version Check, and Package
     runs-on: ubuntu-latest
     outputs:
       artifact-name: extension-package
       package-name: ${{ env.EXTENSION_PACKAGE }}
+      version-changed: ${{ steps.check-version.outputs.changed }}
+      version: ${{ steps.get-version.outputs.version }}
     steps:
-      - name: Checkout
+      - name: Checkout code (fetch depth for history)
         uses: actions/checkout@v4
+        with:
+          fetch-depth: 2 # Needed to compare with previous commit
 
       - name: Validate manifest JSON
         run: python -m json.tool manifest.json > /tmp/manifest.json
 
+      - name: Extract current version
+        id: get-version
+        run: |
+          VERSION=$(jq -r '.version' manifest.json)
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Check if version changed
+        id: check-version
+        run: |
+          # Check if manifest.json changed in the last commit, and if the version field actually changed
+          OLD_VERSION=$(git show HEAD~1:manifest.json | jq -r '.version' || echo "none")
+          NEW_VERSION=$(jq -r '.version' manifest.json)
+          
+          if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
+            echo "Version changed from $OLD_VERSION to $NEW_VERSION. Proceeding with release."
+            echo "changed=true" >> $GITHUB_OUTPUT
+          else
+            echo "Version did not change. Skipping publication."
+            echo "changed=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Package extension zip
+        if: steps.check-version.outputs.changed == 'true'
         run: |
           zip -r "$EXTENSION_PACKAGE" \
             manifest.json \
@@ -39,15 +68,41 @@ jobs:
             icons
 
       - name: Upload package artifact
+        if: steps.check-version.outputs.changed == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: extension-package
           path: ${{ env.EXTENSION_PACKAGE }}
           if-no-files-found: error
 
+  github-release:
+    name: Create GitHub Release
+    needs: package
+    if: needs.package.outputs.version-changed == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      upload_url: ${{ steps.create_release.outputs.upload_url }}
+    steps:
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package.outputs.artifact-name }}
+
+      - name: Create Release
+        id: create_release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.package.outputs.version }}
+          name: Release v${{ needs.package.outputs.version }}
+          body: |
+            Automated extension release for version v${{ needs.package.outputs.version }}.
+          draft: false
+          prerelease: false
+          files: ${{ needs.package.outputs.package-name }}
+
   publish-edge:
     name: Publish to Microsoft Edge Add-ons
-    needs: package
+    needs: [package, github-release]
     runs-on: ubuntu-latest
     steps:
       - name: Download package artifact
@@ -65,7 +120,7 @@ jobs:
 
   publish-firefox:
     name: Publish to Mozilla Add-ons
-    needs: package
+    needs: [package, github-release]
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
