@@ -8,7 +8,7 @@ on:
       - 'manifest.json'
   workflow_dispatch:
 
-# Downgraded global permissions to read-only
+# Globally secure: Default all tokens to read-only
 permissions:
   contents: read
 
@@ -38,7 +38,14 @@ jobs:
       - name: Extract current version
         id: get-version
         run: |
-          VERSION=$(jq -r '.version' manifest.json)
+          VERSION=$(jq -r '.version // empty' manifest.json)
+          
+          # Fail fast if version is blank or null to prevent corrupting tags
+          if [ -z "$VERSION" ] || [ "$VERSION" = "null" ]; then
+            echo "::error::Invalid or missing version in manifest.json"
+            exit 1
+          fi
+          
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Check if version changed
@@ -51,8 +58,11 @@ jobs:
             echo "Fetching the pre-push base commit: ${{ github.event.before }}"
             git fetch origin ${{ github.event.before }} --depth=1
 
-            OLD_VERSION=$(git show ${{ github.event.before }}:manifest.json | jq -r '.version' || echo "none")
-            NEW_VERSION=$(jq -r '.version' manifest.json)
+            # Safely fetch old version context from base commit range
+            OLD_VERSION=$(git show ${{ github.event.before }}:manifest.json | jq -r '.version // "none"' 2>/dev/null || echo "none")
+            
+            # Reuse the strictly validated output version from the previous step
+            NEW_VERSION="${{ steps.get-version.outputs.version }}"
             
             if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
               echo "Version changed from $OLD_VERSION to $NEW_VERSION. Proceeding with release."
@@ -86,7 +96,7 @@ jobs:
     needs: package
     if: needs.package.outputs.version-changed == 'true'
     runs-on: ubuntu-latest
-    # Elevate permissions specifically for the release creation job
+    # Elevate contents permission strictly where needed to cut off top-level risk
     permissions:
       contents: write
     outputs:
