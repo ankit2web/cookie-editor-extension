@@ -8,8 +8,9 @@ on:
       - 'manifest.json'
   workflow_dispatch:
 
+# Downgraded global permissions to read-only
 permissions:
-  contents: write # Required to create a GitHub Release
+  contents: read
 
 concurrency:
   group: publish-extension-${{ github.ref }}
@@ -28,10 +29,8 @@ jobs:
       version-changed: ${{ steps.check-version.outputs.changed }}
       version: ${{ steps.get-version.outputs.version }}
     steps:
-      - name: Checkout code (fetch depth for history)
+      - name: Checkout code
         uses: actions/checkout@v4
-        with:
-          fetch-depth: 2 # Needed to compare with previous commit
 
       - name: Validate manifest JSON
         run: python -m json.tool manifest.json > /tmp/manifest.json
@@ -45,16 +44,13 @@ jobs:
       - name: Check if version changed
         id: check-version
         run: |
-          # Fallback check if it's a workflow_dispatch or a brand new branch push
           if [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ] || [ -z "${{ github.event.before }}" ]; then
             echo "No previous commit context available (dispatch/new branch). Assuming version changed."
             echo "changed=true" >> $GITHUB_OUTPUT
           else
-            # Explicitly fetch the exact pre-push SHA so Git definitely knows about it
             echo "Fetching the pre-push base commit: ${{ github.event.before }}"
             git fetch origin ${{ github.event.before }} --depth=1
 
-            # Extract version from before the entire multi-commit push
             OLD_VERSION=$(git show ${{ github.event.before }}:manifest.json | jq -r '.version' || echo "none")
             NEW_VERSION=$(jq -r '.version' manifest.json)
             
@@ -66,6 +62,7 @@ jobs:
               echo "changed=false" >> $GITHUB_OUTPUT
             fi
           fi
+
       - name: Package extension zip
         if: steps.check-version.outputs.changed == 'true'
         run: |
@@ -89,6 +86,9 @@ jobs:
     needs: package
     if: needs.package.outputs.version-changed == 'true'
     runs-on: ubuntu-latest
+    # Elevate permissions specifically for the release creation job
+    permissions:
+      contents: write
     outputs:
       upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
