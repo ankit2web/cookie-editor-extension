@@ -52,8 +52,8 @@ jobs:
       - name: Check if version changed
         id: check-version
         env:
-          # Securely map the validated output token to an environment variable instead of using raw string interpolation
           NEW_VERSION: ${{ steps.get-version.outputs.version }}
+          GH_TOKEN: ${{ github.token }}
         run: |
           # 1. If manually triggered via workflow_dispatch, treat it as explicit opt-in to publish
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
@@ -107,15 +107,28 @@ jobs:
     runs-on: ubuntu-latest
     permissions:
       contents: write
-    outputs:
-      upload_url: ${{ steps.create_release.outputs.upload_url }}
     steps:
       - name: Download package artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.package.outputs.artifact-name }}
 
+      - name: Check if Tag Already Exists
+        id: check_tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ needs.package.outputs.version }}
+        run: |
+          # Check if the tag exists on remote repository using GitHub CLI
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release tag $TAG already exists. Skipping release creation step to prevent failure."
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
       - name: Create Release
+        if: steps.check_tag.outputs.exists != 'true'
         id: create_release
         uses: softprops/action-gh-release@v2
         with:
@@ -129,7 +142,9 @@ jobs:
 
   publish-edge:
     name: Publish to Microsoft Edge Add-ons
+    # Ensure it triggers regardless of whether the release step skipped or ran
     needs: [package, github-release]
+    if: always() && needs.package.outputs.version-changed == 'true' && (needs.github-release.result == 'success' || needs.github-release.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Download package artifact
@@ -147,7 +162,9 @@ jobs:
 
   publish-firefox:
     name: Publish to Mozilla Add-ons
+    # Ensure it triggers regardless of whether the release step skipped or ran
     needs: [package, github-release]
+    if: always() && needs.package.outputs.version-changed == 'true' && (needs.github-release.result == 'success' || needs.github-release.result == 'skipped')
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
