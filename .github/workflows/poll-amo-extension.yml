@@ -9,6 +9,10 @@ on:
 permissions:
   contents: write
 
+# Provide the global repository target context since there is no checkout step
+env:
+  GH_REPO: ${{ github.repository }}
+
 jobs:
   check-and-update:
     name: Poll AMO for Signed XPI
