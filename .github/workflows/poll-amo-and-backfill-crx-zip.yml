@@ -68,8 +68,9 @@ jobs:
         id: crx_backfill
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.latest_release.outputs.tag }}
         run: |
-          TAG="${{ steps.latest_release.outputs.tag }}"
+          TAG="$RELEASE_TAG"
           echo "CRX asset is missing for release $TAG. Initiating build..."
           
           # Download the source zip file directly from the release assets
@@ -96,8 +97,9 @@ jobs:
       - name: Attach Assets to GitHub Release
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.latest_release.outputs.tag }}
         run: |
-          TAG="${{ steps.latest_release.outputs.tag }}"
+          TAG="$RELEASE_TAG"
           
           # Upload XPI if it was downloaded in this run
           if [ "${{ steps.amo_check.outputs.approved }}" == "true" ]; then
