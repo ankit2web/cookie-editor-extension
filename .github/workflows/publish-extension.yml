@@ -117,8 +117,6 @@ jobs:
     needs: package
     if: needs.package.outputs.version-changed == 'true'
     runs-on: ubuntu-latest
-    outputs:
-      xpi-artifact-name: signed-firefox-xpi
     steps:
       - name: Checkout
         uses: actions/checkout@v7
@@ -139,19 +137,10 @@ jobs:
           apiSecret: ${{ secrets.AMO_SIGN_SECRET }}
           approvalTimeout: 0
 
-      # Locate the newly generated signed XPI inside the web-ext artifacts directory
-      - name: Upload Signed XPI Artifact
-        uses: actions/upload-artifact@v7
-        with:
-          name: signed-firefox-xpi
-          path: web-ext-artifacts/*.xpi
-          if-no-files-found: error
-
   github-release:
     name: Create GitHub Release
-    needs: [package, publish-firefox]
-    # Triggers even if publish-firefox skipped (e.g., if you only run formatting checks, though here it's locked to version-changed)
-    if: always() && needs.package.outputs.version-changed == 'true' && (needs.publish-firefox.result == 'success' || needs.publish-firefox.result == 'skipped')
+    needs: package
+    if: needs.package.outputs.version-changed == 'true'
     runs-on: ubuntu-latest
     permissions:
       contents: write
@@ -160,13 +149,6 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: ${{ needs.package.outputs.artifact-name }}
-
-      - name: Download signed Firefox XPI
-        if: needs.publish-firefox.result == 'success'
-        uses: actions/download-artifact@v8
-        with:
-          name: ${{ needs.publish-firefox.outputs.xpi-artifact-name }}
-          path: signed-xpi
 
       - name: Check if Tag Already Exists
         id: check_tag
@@ -192,15 +174,11 @@ jobs:
             Automated extension release for version v${{ needs.package.outputs.version }}.
           draft: false
           prerelease: false
-          files: |
-            ${{ needs.package.outputs.package-name }}
-            signed-xpi/*.xpi
+          files: ${{ needs.package.outputs.package-name }}
 
       - name: Update Existing Release Assets
         if: steps.check_tag.outputs.exists == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ needs.package.outputs.version }}
-          files: |
-            ${{ needs.package.outputs.package-name }}
-            signed-xpi/*.xpi
+          files: ${{ needs.package.outputs.package-name }}
