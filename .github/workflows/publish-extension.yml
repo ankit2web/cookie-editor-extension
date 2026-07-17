@@ -18,6 +18,7 @@ concurrency:
 
 env:
   EXTENSION_PACKAGE: cookieedit-plus-plus.zip
+  CRX_PACKAGE: cookieedit-plus-plus.crx
 
 jobs:
   package:
@@ -150,6 +151,19 @@ jobs:
         with:
           name: ${{ needs.package.outputs.artifact-name }}
 
+      - name: Generate CRX Asset
+        run: |
+          # Unzip the extension payload to compile the CRX from its structure
+          mkdir -p src_dir
+          unzip "${{ needs.package.outputs.package-name }}" -d src_dir/
+          
+          # Read the permanent private key from your GitHub secrets repository
+          echo "${{ secrets.CRX_PRIVATE_KEY }}" > permanent.pem
+          
+          # Package the CRX file using the filename from global env
+          npx crx pack src_dir -p permanent.pem -o "${{ env.CRX_PACKAGE }}"
+          rm permanent.pem
+
       - name: Check if Tag Already Exists
         id: check_tag
         env:
@@ -174,11 +188,15 @@ jobs:
             Automated extension release for version v${{ needs.package.outputs.version }}.
           draft: false
           prerelease: false
-          files: ${{ needs.package.outputs.package-name }}
+          files: |
+            ${{ needs.package.outputs.package-name }}
+            ${{ env.CRX_PACKAGE }}
 
       - name: Update Existing Release Assets
         if: steps.check_tag.outputs.exists == 'true'
         uses: softprops/action-gh-release@v3
         with:
           tag_name: v${{ needs.package.outputs.version }}
-          files: ${{ needs.package.outputs.package-name }}
+          files: |
+            ${{ needs.package.outputs.package-name }}
+            ${{ env.CRX_PACKAGE }}
