@@ -12,6 +12,7 @@ permissions:
 # Provide the global repository target context since there is no checkout step
 env:
   GH_REPO: ${{ github.repository }}
+  ZIP_PACKAGE: cookieedit-plus-plus.zip
   CRX_PACKAGE: cookieedit-plus-plus.crx
 
 jobs:
@@ -71,15 +72,16 @@ jobs:
           RELEASE_TAG: ${{ steps.latest_release.outputs.tag }}
         run: |
           TAG="$RELEASE_TAG"
+          ZIP_NAME="${{ env.ZIP_PACKAGE }}"
           echo "CRX asset is missing for release $TAG. Initiating build..."
           
-          # Download the source zip file directly from the release assets
-          ZIP_NAME=$(gh release view "$TAG" --json assets -q '.assets[].name | select(endswith(".zip"))' | head -n 1)
-          if [ -z "$ZIP_NAME" ]; then
-            echo "::error::No source .zip package asset found on release $TAG to build CRX from."
+          # Validate that the exact source zip package exists in the release assets
+          if ! gh release view "$TAG" --json assets -q '.assets[].name' | grep -Fxq "$ZIP_NAME"; then
+            echo "::error::Expected source package '$ZIP_NAME' not found on release $TAG."
             exit 1
           fi
           
+          # Download the explicit zip file target
           gh release download "$TAG" -p "$ZIP_NAME"
           
           # Unzip source payload to build environment
