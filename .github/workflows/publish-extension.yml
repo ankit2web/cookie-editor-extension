@@ -18,6 +18,7 @@ concurrency:
 
 env:
   EXTENSION_PACKAGE: cookieedit-plus-plus.zip
+  EXTENSION_XPI: cookieedit-plus-plus.xpi
 
 jobs:
   package:
@@ -26,6 +27,7 @@ jobs:
     outputs:
       artifact-name: extension-package
       package-name: ${{ env.EXTENSION_PACKAGE }}
+      package-xpi: ${{ env.EXTENSION_XPI }}
       version-changed: ${{ steps.check-version.outputs.changed }}
       version: ${{ steps.get-version.outputs.version }}
     steps:
@@ -92,12 +94,19 @@ jobs:
             popup.js \
             icons
 
+      - name: Package extension xpi
+        if: steps.check-version.outputs.changed == 'true'
+        run: |
+          cp "$EXTENSION_PACKAGE" "$EXTENSION_XPI"
+
       - name: Upload package artifact
         if: steps.check-version.outputs.changed == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: extension-package
-          path: ${{ env.EXTENSION_PACKAGE }}
+          path: |
+            ${{ env.EXTENSION_PACKAGE }}
+            ${{ env.EXTENSION_XPI }}
           if-no-files-found: error
 
   github-release:
@@ -138,7 +147,9 @@ jobs:
             Automated extension release for version v${{ needs.package.outputs.version }}.
           draft: false
           prerelease: false
-          files: ${{ needs.package.outputs.package-name }}
+          files: |
+            ${{ needs.package.outputs.package-name }}
+            ${{ needs.package.outputs.package-xpi }}
 
   publish-edge:
     name: Publish to Microsoft Edge Add-ons
