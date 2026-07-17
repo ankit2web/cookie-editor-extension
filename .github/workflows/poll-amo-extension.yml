@@ -39,14 +39,14 @@ jobs:
           AMO_SLUG="cookieedit" 
           
           echo "Checking AMO for version $VERSION..."
-          RESPONSE=$(curl -s "https://addons.mozilla.org/api/v5/addons/addon/$AMO_SLUG/versions/?version=$VERSION")
+          RESPONSE=$(curl -s -L -H 'Accept: application/json' "https://addons.mozilla.org/api/v5/addons/addon/$AMO_SLUG/versions/$VERSION/")
           
-          # Check if the file is reviewed and signed
-          # Look for a file download link ending in .xpi
-          XPI_URL=$(echo "$RESPONSE" | jq -r '.results[0].file.url // empty')
+          # Verify the API response matches our targeted version and extract the signed file URL
+          RETURNED_VERSION=$(echo "$RESPONSE" | jq -r '.version // empty')
+          XPI_URL=$(echo "$RESPONSE" | jq -r '.file.url // empty')
           
-          if [ -z "$XPI_URL" ] || [ "$XPI_URL" == "null" ]; then
-            echo "Version $VERSION is not signed or approved yet on AMO."
+          if [ "$RETURNED_VERSION" != "$VERSION" ] || [ -z "$XPI_URL" ] || [ "$XPI_URL" == "null" ]; then
+            echo "Version $VERSION is not signed or approved yet on AMO (or version mismatch)."
             echo "approved=false" >> $GITHUB_OUTPUT
           else
             echo "Signed XPI found! Downloading..."
