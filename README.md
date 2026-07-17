@@ -30,7 +30,7 @@ A lightweight Chrome Extension (Manifest V3) for viewing, editing, creating, and
 
 This repository includes a GitHub Actions workflow at `.github/workflows/publish-extension.yml` that validates `manifest.json`, packages the extension once, and publishes that same package to both Microsoft Edge Add-ons and Mozilla Add-ons.
 
-The workflow triggers automatically whenever a change to the version string inside `manifest.json` is pushed to the `main` branch. It will automatically handle generating a new GitHub Release with the bundled extension package, before pushing that asset out to the web stores via API. It can also be started manually from the **Actions** tab with `workflow_dispatch`.
+The workflow triggers automatically whenever a change to the version string inside `manifest.json` is pushed to the `main` branch. It will automatically handle generating a new GitHub Release containing both the standard `.zip` distribution and a native Firefox `.xpi` asset before pushing the package out to the web stores via API. It can also be started manually from the **Actions** tab with `workflow_dispatch`.
 
 Configure these repository secrets before publishing:
 

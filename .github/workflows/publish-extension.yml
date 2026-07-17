@@ -30,7 +30,7 @@ jobs:
       version: ${{ steps.get-version.outputs.version }}
     steps:
       - name: Checkout code
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Validate manifest JSON
         run: python -m json.tool manifest.json > /tmp/manifest.json
@@ -55,22 +55,15 @@ jobs:
           NEW_VERSION: ${{ steps.get-version.outputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          # 1. If manually triggered via workflow_dispatch, treat it as explicit opt-in to publish
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "Manual workflow dispatch detected. Force publishing enabled."
             echo "changed=true" >> $GITHUB_OUTPUT
-            
-          # 2. If it's a push event but has no baseline (e.g. brand new branch), DO NOT auto-publish
           elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ] || [ -z "${{ github.event.before }}" ]; then
             echo "No historic push baseline available for this branch. Skipping auto-publication to avoid duplicates."
             echo "changed=false" >> $GITHUB_OUTPUT
-            
-          # 3. Standard push event with a verifiable baseline history
           else
             echo "Fetching the pre-push base commit: ${{ github.event.before }}"
             git fetch origin ${{ github.event.before }} --depth=1
-
-            # Safely grab the baseline file content context
             OLD_VERSION=$(git show ${{ github.event.before }}:manifest.json | jq -r '.version // "none"' 2>/dev/null || echo "none")
             
             if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
@@ -94,61 +87,20 @@ jobs:
 
       - name: Upload package artifact
         if: steps.check-version.outputs.changed == 'true'
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: extension-package
           path: ${{ env.EXTENSION_PACKAGE }}
           if-no-files-found: error
 
-  github-release:
-    name: Create GitHub Release
+  publish-edge:
+    name: Publish to Microsoft Edge Add-ons
     needs: package
     if: needs.package.outputs.version-changed == 'true'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Download package artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.package.outputs.artifact-name }}
-
-      - name: Check if Tag Already Exists
-        id: check_tag
-        env:
-          GH_TOKEN: ${{ github.token }}
-          TAG: v${{ needs.package.outputs.version }}
-        run: |
-          # Check if the tag exists on remote repository using GitHub CLI
-          if gh release view "$TAG" >/dev/null 2>&1; then
-            echo "Release tag $TAG already exists. Skipping release creation step to prevent failure."
-            echo "exists=true" >> $GITHUB_OUTPUT
-          else
-            echo "exists=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Create Release
-        if: steps.check_tag.outputs.exists != 'true'
-        id: create_release
-        uses: softprops/action-gh-release@v2
-        with:
-          tag_name: v${{ needs.package.outputs.version }}
-          name: Release v${{ needs.package.outputs.version }}
-          body: |
-            Automated extension release for version v${{ needs.package.outputs.version }}.
-          draft: false
-          prerelease: false
-          files: ${{ needs.package.outputs.package-name }}
-
-  publish-edge:
-    name: Publish to Microsoft Edge Add-ons
-    # Ensure it triggers regardless of whether the release step skipped or ran
-    needs: [package, github-release]
-    if: always() && needs.package.outputs.version-changed == 'true' && (needs.github-release.result == 'success' || needs.github-release.result == 'skipped')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download package artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.package.outputs.artifact-name }}
 
@@ -162,21 +114,21 @@ jobs:
 
   publish-firefox:
     name: Publish to Mozilla Add-ons
-    # Ensure it triggers regardless of whether the release step skipped or ran
-    needs: [package, github-release]
-    if: always() && needs.package.outputs.version-changed == 'true' && (needs.github-release.result == 'success' || needs.github-release.result == 'skipped')
+    needs: package
+    if: needs.package.outputs.version-changed == 'true'
     runs-on: ubuntu-latest
     steps:
       - name: Checkout
-        uses: actions/checkout@v4
+        uses: actions/checkout@v7
 
       - name: Download package artifact
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           name: ${{ needs.package.outputs.artifact-name }}
 
       - name: Submit Firefox add-on to AMO
         uses: kewisch/action-web-ext@v2
+        id: web-ext-sign
         with:
           cmd: sign
           source: ${{ needs.package.outputs.package-name }}
@@ -184,3 +136,49 @@ jobs:
           apiKey: ${{ secrets.AMO_SIGN_KEY }}
           apiSecret: ${{ secrets.AMO_SIGN_SECRET }}
           approvalTimeout: 0
+
+  github-release:
+    name: Create GitHub Release
+    needs: package
+    if: needs.package.outputs.version-changed == 'true'
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download source package artifact
+        uses: actions/download-artifact@v8
+        with:
+          name: ${{ needs.package.outputs.artifact-name }}
+
+      - name: Check if Tag Already Exists
+        id: check_tag
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: v${{ needs.package.outputs.version }}
+        run: |
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            echo "Release tag $TAG already exists. Skipping release creation step to prevent failure."
+            echo "exists=true" >> $GITHUB_OUTPUT
+          else
+            echo "exists=false" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create Release
+        if: steps.check_tag.outputs.exists != 'true'
+        id: create_release
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ needs.package.outputs.version }}
+          name: Release v${{ needs.package.outputs.version }}
+          body: |
+            Automated extension release for version v${{ needs.package.outputs.version }}.
+          draft: false
+          prerelease: false
+          files: ${{ needs.package.outputs.package-name }}
+
+      - name: Update Existing Release Assets
+        if: steps.check_tag.outputs.exists == 'true'
+        uses: softprops/action-gh-release@v3
+        with:
+          tag_name: v${{ needs.package.outputs.version }}
+          files: ${{ needs.package.outputs.package-name }}
