@@ -1,4 +1,4 @@
-name: Fetch Signed Firefox Asset
+name: Fetch Signed Firefox Asset & Ensure CRX
 
 on:
   schedule:
@@ -12,10 +12,11 @@ permissions:
 # Provide the global repository target context since there is no checkout step
 env:
   GH_REPO: ${{ github.repository }}
+  CRX_PACKAGE: cookieedit-plus-plus.crx
 
 jobs:
   check-and-update:
-    name: Poll AMO for Signed XPI
+    name: Poll AMO for Signed XPI & Verify CRX
     runs-on: ubuntu-latest
     steps:
       - name: Get Latest GitHub Release Info
@@ -32,6 +33,10 @@ jobs:
           # Check if an XPI asset is already attached to this release
           HAS_XPI=$(gh release view "$TAG" --json assets -q '[.assets[].name | endswith(".xpi")] | any')
           echo "has_xpi=$HAS_XPI" >> $GITHUB_OUTPUT
+
+          # Check if a CRX asset is already attached to this release
+          HAS_CRX=$(gh release view "$TAG" --json assets -q '[.assets[].name | endswith(".crx")] | any')
+          echo "has_crx=$HAS_CRX" >> $GITHUB_OUTPUT
 
       - name: Fetch and Check AMO Status
         if: steps.latest_release.outputs.has_xpi != 'true'
@@ -58,11 +63,50 @@ jobs:
             echo "approved=true" >> $GITHUB_OUTPUT
           fi
 
-      - name: Attach Signed XPI to GitHub Release
-        if: steps.latest_release.outputs.has_xpi != 'true' && steps.amo_check.outputs.approved == 'true'
+      - name: Backfill Missing CRX Asset
+        if: steps.latest_release.outputs.has_crx != 'true'
+        id: crx_backfill
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           TAG="${{ steps.latest_release.outputs.tag }}"
-          echo "Uploading signed XPI to release $TAG..."
-          gh release upload "$TAG" cookieedit-plus-plus.xpi --clobber
+          echo "CRX asset is missing for release $TAG. Initiating build..."
+          
+          # Download the source zip file directly from the release assets
+          ZIP_NAME=$(gh release view "$TAG" --json assets -q '.assets[].name | select(endswith(".zip"))' | head -n 1)
+          if [ -z "$ZIP_NAME" ]; then
+            echo "::error::No source .zip package asset found on release $TAG to build CRX from."
+            exit 1
+          fi
+          
+          gh release download "$TAG" -p "$ZIP_NAME"
+          
+          # Unzip source payload to build environment
+          mkdir -p src_dir
+          unzip "$ZIP_NAME" -d src_dir/
+          
+          # Read private key from repository secret
+          echo "${{ secrets.CRX_PRIVATE_KEY }}" > permanent.pem
+          
+          # Compile the CRX
+          npx crx pack src_dir -p permanent.pem -o "${{ env.CRX_PACKAGE }}"
+          rm permanent.pem
+          echo "crx_built=true" >> $GITHUB_OUTPUT
+
+      - name: Attach Assets to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          TAG="${{ steps.latest_release.outputs.tag }}"
+          
+          # Upload XPI if it was downloaded in this run
+          if [ "${{ steps.amo_check.outputs.approved }}" == "true" ]; then
+            echo "Uploading signed XPI to release $TAG..."
+            gh release upload "$TAG" cookieedit-plus-plus.xpi --clobber
+          fi
+          
+          # Upload CRX if it was compiled in this run
+          if [ "${{ steps.crx_backfill.outputs.crx_built }}" == "true" ]; then
+            echo "Uploading compiled CRX to release $TAG..."
+            gh release upload "$TAG" "${{ env.CRX_PACKAGE }}" --clobber
+          fi
