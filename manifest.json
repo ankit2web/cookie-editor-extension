@@ -1,7 +1,7 @@
 {
   "manifest_version": 3,
   "name": "CookieEdit++",
-  "version": "2.0.2",
+  "version": "2.0.3",
   "description": "View, edit, create, and delete cookies for the current tab domain.",
   "permissions": [
     "cookies",
