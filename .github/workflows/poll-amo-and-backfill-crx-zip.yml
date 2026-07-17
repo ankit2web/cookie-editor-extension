@@ -1,0 +1,116 @@
+name: Fetch Signed Firefox Asset & Ensure CRX
+
+on:
+  schedule:
+    # Runs every 6 hours to check for approval (adjust as needed)
+    - cron: '0 */6 * * *'
+  workflow_dispatch: # Allows you to manually trigger a check
+
+permissions:
+  contents: write
+
+# Provide the global repository target context since there is no checkout step
+env:
+  GH_REPO: ${{ github.repository }}
+  ZIP_PACKAGE: cookieedit-plus-plus.zip
+  CRX_PACKAGE: cookieedit-plus-plus.crx
+
+jobs:
+  check-and-update:
+    name: Poll AMO for Signed XPI & Verify CRX
+    runs-on: ubuntu-latest
+    steps:
+      - name: Get Latest GitHub Release Info
+        id: latest_release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Fetch the latest release tag (e.g., v1.0.4) and strip the 'v' prefix
+          TAG=$(gh release view --json tagName -q '.tagName')
+          VERSION="${TAG#v}"
+          echo "tag=$TAG" >> $GITHUB_OUTPUT
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+          
+          # Check if an XPI asset is already attached to this release
+          HAS_XPI=$(gh release view "$TAG" --json assets -q '[.assets[].name | endswith(".xpi")] | any')
+          echo "has_xpi=$HAS_XPI" >> $GITHUB_OUTPUT
+
+          # Check if a CRX asset is already attached to this release
+          HAS_CRX=$(gh release view "$TAG" --json assets -q '[.assets[].name | endswith(".crx")] | any')
+          echo "has_crx=$HAS_CRX" >> $GITHUB_OUTPUT
+
+      - name: Fetch and Check AMO Status
+        if: steps.latest_release.outputs.has_xpi != 'true'
+        id: amo_check
+        run: |
+          VERSION="${{ steps.latest_release.outputs.version }}"
+          
+          # Replace with your extension's actual UUID/Slug from the AMO dashboard
+          AMO_SLUG="cookieedit" 
+          
+          echo "Checking AMO for version $VERSION..."
+          RESPONSE=$(curl -s -L -H 'Accept: application/json' "https://addons.mozilla.org/api/v5/addons/addon/$AMO_SLUG/versions/$VERSION/")
+          
+          # Verify the API response matches our targeted version and extract the signed file URL
+          RETURNED_VERSION=$(echo "$RESPONSE" | jq -r '.version // empty')
+          XPI_URL=$(echo "$RESPONSE" | jq -r '.file.url // empty')
+          
+          if [ "$RETURNED_VERSION" != "$VERSION" ] || [ -z "$XPI_URL" ] || [ "$XPI_URL" == "null" ]; then
+            echo "Version $VERSION is not signed or approved yet on AMO (or version mismatch)."
+            echo "approved=false" >> $GITHUB_OUTPUT
+          else
+            echo "Signed XPI found! Downloading..."
+            curl -L -o "cookieedit-plus-plus.xpi" "$XPI_URL"
+            echo "approved=true" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Backfill Missing CRX Asset
+        if: steps.latest_release.outputs.has_crx != 'true'
+        id: crx_backfill
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.latest_release.outputs.tag }}
+        run: |
+          TAG="$RELEASE_TAG"
+          ZIP_NAME="${{ env.ZIP_PACKAGE }}"
+          echo "CRX asset is missing for release $TAG. Initiating build..."
+          
+          # Validate that the exact source zip package exists in the release assets
+          if ! gh release view "$TAG" --json assets -q '.assets[].name' | grep -Fxq "$ZIP_NAME"; then
+            echo "::error::Expected source package '$ZIP_NAME' not found on release $TAG."
+            exit 1
+          fi
+          
+          # Download the explicit zip file target
+          gh release download "$TAG" -p "$ZIP_NAME"
+          
+          # Unzip source payload to build environment
+          mkdir -p src_dir
+          unzip "$ZIP_NAME" -d src_dir/
+          
+          # Read private key from repository secret
+          echo "${{ secrets.CRX_PRIVATE_KEY }}" > permanent.pem
+          
+          # Compile the CRX
+          npx crx@5.0.1 pack src_dir -p permanent.pem -o "${{ env.CRX_PACKAGE }}"
+          rm permanent.pem
+          echo "crx_built=true" >> $GITHUB_OUTPUT
+
+      - name: Attach Assets to GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.latest_release.outputs.tag }}
+        run: |
+          TAG="$RELEASE_TAG"
+          
+          # Upload XPI if it was downloaded in this run
+          if [ "${{ steps.amo_check.outputs.approved }}" == "true" ]; then
+            echo "Uploading signed XPI to release $TAG..."
+            gh release upload "$TAG" cookieedit-plus-plus.xpi --clobber
+          fi
+          
+          # Upload CRX if it was compiled in this run
+          if [ "${{ steps.crx_backfill.outputs.crx_built }}" == "true" ]; then
+            echo "Uploading compiled CRX to release $TAG..."
+            gh release upload "$TAG" "${{ env.CRX_PACKAGE }}" --clobber
+          fi
