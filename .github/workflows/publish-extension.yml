@@ -152,15 +152,21 @@ jobs:
           name: ${{ needs.package.outputs.artifact-name }}
 
       - name: Generate CRX Asset
+        env:
+          RAW_KEY: ${{ secrets.CRX_PRIVATE_KEY }}
         run: |
           # Unzip the extension payload to compile the CRX from its structure
           mkdir -p src_dir
           unzip "${{ needs.package.outputs.package-name }}" -d src_dir/
           
-          # Read the permanent private key from your GitHub secrets repository
-          echo "${{ secrets.CRX_PRIVATE_KEY }}" > permanent.pem
+          # Check if the secret is populated. If empty, generate a fallback key on the fly.
+          if [ -z "$RAW_KEY" ]; then
+            echo "CRX_PRIVATE_KEY secret is not set. Generating an on-the-fly key fallback..."
+            openssl genrsa -out permanent.pem 2048
+          else
+            echo "$RAW_KEY" > permanent.pem
+          fi
           
-          # Package the CRX file using a strictly pinned tool version to avoid runtime drift or exploits
           npx crx@5.0.1 pack src_dir -p permanent.pem -o "${{ env.CRX_PACKAGE }}"
           rm permanent.pem
 
