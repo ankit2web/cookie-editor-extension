@@ -18,7 +18,6 @@ concurrency:
 
 env:
   EXTENSION_PACKAGE: cookieedit-plus-plus.zip
-  EXTENSION_XPI: cookieedit-plus-plus.xpi
 
 jobs:
   package:
@@ -27,7 +26,6 @@ jobs:
     outputs:
       artifact-name: extension-package
       package-name: ${{ env.EXTENSION_PACKAGE }}
-      package-xpi: ${{ env.EXTENSION_XPI }}
       version-changed: ${{ steps.check-version.outputs.changed }}
       version: ${{ steps.get-version.outputs.version }}
     steps:
@@ -57,22 +55,15 @@ jobs:
           NEW_VERSION: ${{ steps.get-version.outputs.version }}
           GH_TOKEN: ${{ github.token }}
         run: |
-          # 1. If manually triggered via workflow_dispatch, treat it as explicit opt-in to publish
           if [ "${{ github.event_name }}" = "workflow_dispatch" ]; then
             echo "Manual workflow dispatch detected. Force publishing enabled."
             echo "changed=true" >> $GITHUB_OUTPUT
-            
-          # 2. If it's a push event but has no baseline (e.g. brand new branch), DO NOT auto-publish
           elif [ "${{ github.event.before }}" = "0000000000000000000000000000000000000000" ] || [ -z "${{ github.event.before }}" ]; then
             echo "No historic push baseline available for this branch. Skipping auto-publication to avoid duplicates."
             echo "changed=false" >> $GITHUB_OUTPUT
-            
-          # 3. Standard push event with a verifiable baseline history
           else
             echo "Fetching the pre-push base commit: ${{ github.event.before }}"
             git fetch origin ${{ github.event.before }} --depth=1
-
-            # Safely grab the baseline file content context
             OLD_VERSION=$(git show ${{ github.event.before }}:manifest.json | jq -r '.version // "none"' 2>/dev/null || echo "none")
             
             if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
@@ -94,33 +85,88 @@ jobs:
             popup.js \
             icons
 
-      - name: Package extension xpi
-        if: steps.check-version.outputs.changed == 'true'
-        run: |
-          cp "$EXTENSION_PACKAGE" "$EXTENSION_XPI"
-
       - name: Upload package artifact
         if: steps.check-version.outputs.changed == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: extension-package
-          path: |
-            ${{ env.EXTENSION_PACKAGE }}
-            ${{ env.EXTENSION_XPI }}
+          path: ${{ env.EXTENSION_PACKAGE }}
           if-no-files-found: error
 
-  github-release:
-    name: Create GitHub Release
+  publish-edge:
+    name: Publish to Microsoft Edge Add-ons
     needs: package
     if: needs.package.outputs.version-changed == 'true'
     runs-on: ubuntu-latest
-    permissions:
-      contents: write
     steps:
       - name: Download package artifact
         uses: actions/download-artifact@v4
         with:
           name: ${{ needs.package.outputs.artifact-name }}
+
+      - name: Publish Edge add-on
+        uses: wdzeng/edge-addon@v2
+        with:
+          product-id: ${{ secrets.EDGE_PRODUCT_ID }}
+          zip-path: ${{ needs.package.outputs.package-name }}
+          api-key: ${{ secrets.EDGE_API_KEY }}
+          client-id: ${{ secrets.EDGE_CLIENT_ID }}
+
+  publish-firefox:
+    name: Publish to Mozilla Add-ons
+    needs: package
+    if: needs.package.outputs.version-changed == 'true'
+    runs-on: ubuntu-latest
+    outputs:
+      xpi-artifact-name: signed-firefox-xpi
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Download package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package.outputs.artifact-name }}
+
+      - name: Submit Firefox add-on to AMO
+        uses: kewisch/action-web-ext@v2
+        id: web-ext-sign
+        with:
+          cmd: sign
+          source: ${{ needs.package.outputs.package-name }}
+          channel: listed
+          apiKey: ${{ secrets.AMO_SIGN_KEY }}
+          apiSecret: ${{ secrets.AMO_SIGN_SECRET }}
+          approvalTimeout: 0
+
+      # Locate the newly generated signed XPI inside the web-ext artifacts directory
+      - name: Upload Signed XPI Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: signed-firefox-xpi
+          path: web-ext-artifacts/*.xpi
+          if-no-files-found: error
+
+  github-release:
+    name: Create GitHub Release
+    needs: [package, publish-firefox]
+    # Triggers even if publish-firefox skipped (e.g., if you only run formatting checks, though here it's locked to version-changed)
+    if: always() && needs.package.outputs.version-changed == 'true' && (needs.publish-firefox.result == 'success' || needs.publish-firefox.result == 'skipped')
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Download source package artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.package.outputs.artifact-name }}
+
+      - name: Download signed Firefox XPI
+        if: needs.publish-firefox.result == 'success'
+        uses: actions/download-artifact@v4
+        with:
+          name: ${{ needs.publish-firefox.outputs.xpi-artifact-name }}
+          path: signed-xpi
 
       - name: Check if Tag Already Exists
         id: check_tag
@@ -128,7 +174,6 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           TAG: v${{ needs.package.outputs.version }}
         run: |
-          # Check if the tag exists on remote repository using GitHub CLI
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release tag $TAG already exists. Skipping release creation step to prevent failure."
             echo "exists=true" >> $GITHUB_OUTPUT
@@ -149,49 +194,4 @@ jobs:
           prerelease: false
           files: |
             ${{ needs.package.outputs.package-name }}
-            ${{ needs.package.outputs.package-xpi }}
-
-  publish-edge:
-    name: Publish to Microsoft Edge Add-ons
-    # Ensure it triggers regardless of whether the release step skipped or ran
-    needs: [package, github-release]
-    if: always() && needs.package.outputs.version-changed == 'true' && (needs.github-release.result == 'success' || needs.github-release.result == 'skipped')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Download package artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.package.outputs.artifact-name }}
-
-      - name: Publish Edge add-on
-        uses: wdzeng/edge-addon@v2
-        with:
-          product-id: ${{ secrets.EDGE_PRODUCT_ID }}
-          zip-path: ${{ needs.package.outputs.package-name }}
-          api-key: ${{ secrets.EDGE_API_KEY }}
-          client-id: ${{ secrets.EDGE_CLIENT_ID }}
-
-  publish-firefox:
-    name: Publish to Mozilla Add-ons
-    # Ensure it triggers regardless of whether the release step skipped or ran
-    needs: [package, github-release]
-    if: always() && needs.package.outputs.version-changed == 'true' && (needs.github-release.result == 'success' || needs.github-release.result == 'skipped')
-    runs-on: ubuntu-latest
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v4
-
-      - name: Download package artifact
-        uses: actions/download-artifact@v4
-        with:
-          name: ${{ needs.package.outputs.artifact-name }}
-
-      - name: Submit Firefox add-on to AMO
-        uses: kewisch/action-web-ext@v2
-        with:
-          cmd: sign
-          source: ${{ needs.package.outputs.package-name }}
-          channel: listed
-          apiKey: ${{ secrets.AMO_SIGN_KEY }}
-          apiSecret: ${{ secrets.AMO_SIGN_SECRET }}
-          approvalTimeout: 0
+            signed-xpi/*.xpi
