@@ -92,7 +92,7 @@ jobs:
           echo "${{ secrets.CRX_PRIVATE_KEY }}" > permanent.pem
           
           # Compile the CRX
-          npx crx pack src_dir -p permanent.pem -o "${{ env.CRX_PACKAGE }}"
+          npx crx@5.0.1 pack src_dir -p permanent.pem -o "${{ env.CRX_PACKAGE }}"
           rm permanent.pem
           echo "crx_built=true" >> $GITHUB_OUTPUT
 
