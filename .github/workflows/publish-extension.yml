@@ -195,3 +195,12 @@ jobs:
           files: |
             ${{ needs.package.outputs.package-name }}
             signed-xpi/*.xpi
+
+      - name: Update Existing Release Assets
+        if: steps.check_tag.outputs.exists == 'true'
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: v${{ needs.package.outputs.version }}
+          files: |
+            ${{ needs.package.outputs.package-name }}
+            signed-xpi/*.xpi
