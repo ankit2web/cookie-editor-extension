@@ -160,16 +160,17 @@ jobs:
           # Read the permanent private key from your GitHub secrets repository
           echo "${{ secrets.CRX_PRIVATE_KEY }}" > permanent.pem
           
-          # Package the CRX file using the filename from global env
-          npx crx pack src_dir -p permanent.pem -o "${{ env.CRX_PACKAGE }}"
+          # Package the CRX file using a strictly pinned tool version to avoid runtime drift or exploits
+          npx crx@5.0.1 pack src_dir -p permanent.pem -o "${{ env.CRX_PACKAGE }}"
           rm permanent.pem
 
       - name: Check if Tag Already Exists
         id: check_tag
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: v${{ needs.package.outputs.version }}
+          RELEASE_VERSION: ${{ needs.package.outputs.version }}
         run: |
+          TAG="v$RELEASE_VERSION"
           if gh release view "$TAG" >/dev/null 2>&1; then
             echo "Release tag $TAG already exists. Skipping release creation step to prevent failure."
             echo "exists=true" >> $GITHUB_OUTPUT
