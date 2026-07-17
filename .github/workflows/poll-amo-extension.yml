@@ -36,7 +36,7 @@ jobs:
           VERSION="${{ steps.latest_release.outputs.version }}"
           
           # Replace with your extension's actual UUID/Slug from the AMO dashboard
-          AMO_SLUG="cookieedit-plus-plus" 
+          AMO_SLUG="cookieedit" 
           
           echo "Checking AMO for version $VERSION..."
           RESPONSE=$(curl -s "https://addons.mozilla.org/api/v5/addons/addon/$AMO_SLUG/versions/?version=$VERSION")
