@@ -8,7 +8,6 @@ on:
       - 'manifest.json'
   workflow_dispatch:
 
-# Globally secure: Default all tokens to read-only
 permissions:
   contents: read
 
@@ -32,17 +31,13 @@ jobs:
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
-
       - name: Validate manifest JSON
         run: python -m json.tool manifest.json > /tmp/manifest.json
-
       - name: Extract current version
         id: get-version
         run: |
           VERSION=$(bash scripts/validate-manifest-version.sh manifest.json)
-
           echo "version=$VERSION" >> $GITHUB_OUTPUT
-
       - name: Check if version changed
         id: check-version
         env:
@@ -59,7 +54,6 @@ jobs:
             echo "Fetching the pre-push base commit: ${{ github.event.before }}"
             git fetch origin ${{ github.event.before }} --depth=1
             OLD_VERSION=$(git show ${{ github.event.before }}:manifest.json | jq -r '.version // "none"' 2>/dev/null || echo "none")
-            
             if [ "$OLD_VERSION" != "$NEW_VERSION" ]; then
               echo "Version changed from $OLD_VERSION to $NEW_VERSION. Proceeding with release."
               echo "changed=true" >> $GITHUB_OUTPUT
@@ -68,17 +62,10 @@ jobs:
               echo "changed=false" >> $GITHUB_OUTPUT
             fi
           fi
-
       - name: Package extension zip
         if: steps.check-version.outputs.changed == 'true'
         run: |
-          zip -r "$EXTENSION_PACKAGE" \
-            manifest.json \
-            popup.html \
-            popup.css \
-            popup.js \
-            icons
-
+          zip -r "$EXTENSION_PACKAGE" manifest.json popup.html popup-v2.html popup-v2.css popup.css popup.js icons
       - name: Upload package artifact
         if: steps.check-version.outputs.changed == 'true'
         uses: actions/upload-artifact@v7
@@ -97,7 +84,6 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: ${{ needs.package.outputs.artifact-name }}
-
       - name: Publish Edge add-on
         uses: wdzeng/edge-addon@v2
         with:
@@ -114,12 +100,10 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v7
-
       - name: Download package artifact
         uses: actions/download-artifact@v8
         with:
           name: ${{ needs.package.outputs.artifact-name }}
-
       - name: Submit Firefox add-on to AMO
         uses: kewisch/action-web-ext@v2
         id: web-ext-sign
@@ -143,26 +127,19 @@ jobs:
         uses: actions/download-artifact@v8
         with:
           name: ${{ needs.package.outputs.artifact-name }}
-
       - name: Generate CRX Asset
         env:
           RAW_KEY: ${{ secrets.CRX_PRIVATE_KEY }}
         run: |
-          # Unzip the extension payload to compile the CRX from its structure
           mkdir -p src_dir
           unzip "${{ needs.package.outputs.package-name }}" -d src_dir/
-          
-          # Check if the secret is populated. If empty, generate a fallback key on the fly.
           if [ -z "$RAW_KEY" ]; then
-            echo "CRX_PRIVATE_KEY secret is not set. Generating an on-the-fly key fallback..."
-            openssl genrsa -out permanent.pem 2048
-          else
-            echo "$RAW_KEY" > permanent.pem
+            echo "::error::CRX_PRIVATE_KEY secret is required to preserve the stable extension identity."
+            exit 1
           fi
-          
+          printf '%s\n' "$RAW_KEY" > permanent.pem
           npx crx@5.0.1 pack src_dir -p permanent.pem -o "${{ env.CRX_PACKAGE }}"
-          rm permanent.pem
-
+          rm -f permanent.pem
       - name: Check if Tag Already Exists
         id: check_tag
         env:
@@ -176,7 +153,6 @@ jobs:
           else
             echo "exists=false" >> $GITHUB_OUTPUT
           fi
-
       - name: Create Release
         if: steps.check_tag.outputs.exists != 'true'
         id: create_release
@@ -184,14 +160,12 @@ jobs:
         with:
           tag_name: v${{ needs.package.outputs.version }}
           name: Release v${{ needs.package.outputs.version }}
-          body: |
-            Automated extension release for version v${{ needs.package.outputs.version }}.
+          body: Automated extension release for version v${{ needs.package.outputs.version }}.
           draft: false
           prerelease: false
           files: |
             ${{ needs.package.outputs.package-name }}
             ${{ env.CRX_PACKAGE }}
-
       - name: Update Existing Release Assets
         if: steps.check_tag.outputs.exists == 'true'
         uses: softprops/action-gh-release@v3
