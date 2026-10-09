@@ -41,13 +41,25 @@ jobs:
         run: |
           VERSION=$(jq -r '.version // empty' manifest.json)
           
-          # Strict SemVer regex validation to eliminate shell injections or malformed outputs
-          SEMVER_REGEX="^[0-9]+\.[0-9]+\.[0-9]+(-[a-zA-Z0-9.]+)?$"
-          if [[ ! "$VERSION" =~ $SEMVER_REGEX ]]; then
-            echo "::error::Version '$VERSION' is missing or does not match a strict SemVer format."
+          # Validate the original JSON string before command substitution can strip newlines.
+          if ! jq -e '
+            .version as $v
+            | (($v | type) == "string")
+              and (($v | test("^[0-9]+\\.[0-9]+\\.[0-9]+$"))
+              and (($v | contains("\\n")) | not)
+              and (($v | contains("\\r")) | not)
+          ' manifest.json > /dev/null; then
+            echo "::error::Invalid manifest version. Expected three dot-separated integer components (for example, 2.1.0); prerelease suffixes and build metadata are not allowed."
             exit 1
           fi
-          
+
+          VERSION=$(jq -r '.version' manifest.json)
+          VERSION_REGEX='^[0-9]+\\.[0-9]+\\.[0-9]+$'
+          if [[ ! "$VERSION" =~ $VERSION_REGEX ]]; then
+            echo "::error::Version '$VERSION' is invalid. Expected three dot-separated integer components; prerelease suffixes are not allowed."
+            exit 1
+          fi
+
           echo "version=$VERSION" >> $GITHUB_OUTPUT
 
       - name: Check if version changed
