@@ -158,11 +158,18 @@ function isImportDomainAllowed(sourceDomain) {
   return source === active || active.endsWith(`.${source}`);
 }
 
+function formatLocalDateTime(timestampSeconds) {
+  const date = new Date(timestampSeconds * 1000);
+  const pad = (part) => String(part).padStart(2, '0');
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+}
+
 function formatCookieMeta(cookie) {
   const expiration = cookie.expirationDate ? new Date(cookie.expirationDate * 1000).toLocaleString() : 'Session';
   const partitioned = cookie.partitionKey ? ' • Partitioned' : '';
   return `${cookie.domain} • ${cookie.path} • ${cookie.sameSite || 'unspecified'} • ${cookie.secure ? 'Secure' : 'Not secure'} • ${cookie.httpOnly ? 'HttpOnly' : 'JS-accessible'} • ${expiration}${partitioned}`;
 }
+
 
 function updateStats() {
   dom.cookieCount.textContent = String(allCookies.length);
@@ -201,7 +208,7 @@ function renderCookies(cookies) {
     secureInput.checked = cookie.secure;
     httpOnlyInput.checked = cookie.httpOnly;
     sameSiteInput.value = cookie.sameSite || 'unspecified';
-    expirationInput.value = cookie.expirationDate ? new Date(cookie.expirationDate * 1000).toISOString().slice(0, 16) : '';
+    expirationInput.value = cookie.expirationDate ? formatLocalDateTime(cookie.expirationDate) : '';
     meta.textContent = formatCookieMeta(cookie);
     item.dataset.cookieKey = cookieIdentity(cookie);
 
@@ -269,7 +276,9 @@ async function upsertCookie({ original, name, value, path, secure, httpOnly, sam
     const effectiveSecure = original ? Boolean(secure) : Boolean(secure);
     const effectiveHttpOnly = original ? Boolean(httpOnly) : Boolean(httpOnly);
     const effectiveSameSite = sameSite || 'unspecified';
-    const effectivePartitionKey = original?.partitionKey || currentPartitionKey || null;
+    // Only preserve partitioning for an already-partitioned cookie. The active tab's
+    // partition key must not silently convert ordinary cookies into partitioned cookies.
+    const effectivePartitionKey = original?.partitionKey || null;
     const hostOnly = original ? Boolean(original.hostOnly) : true;
     const domain = original && !original.hostOnly ? original.domain : undefined;
 
