@@ -13,6 +13,7 @@ on:
   pull_request:
     paths:
       - 'manifest.json'
+      - '.github/workflows/validate-extension-version.yml'
       - '.github/workflows/publish-extension.yml'
       - 'scripts/validate-manifest-version.sh'
       - 'tests/validate-manifest-version.test.sh'
