@@ -108,13 +108,20 @@ function buildPartitionDetails(partitionKey) {
 
 async function getCurrentTab() {
   const [tab] = await chrome.tabs.query({ active: true, currentWindow: true });
-  if (!tab || !tab.url) throw new Error('No active tab with a URL was found.');
+  if (!tab || !tab.url || tab.id == null) throw new Error('No active tab with a URL was found.');
   const url = new URL(tab.url);
   if (!['http:', 'https:'].includes(url.protocol)) {
     throw new Error('This extension only supports http/https pages.');
   }
+
+  // Tab objects do not expose cookieStoreId. Resolve the store by matching
+  // the active tab ID against Chrome's cookie-store records instead.
+  const stores = await chrome.cookies.getAllCookieStores();
+  const store = stores.find((candidate) => candidate.tabIds.includes(tab.id));
+  if (!store) throw new Error('Unable to resolve the active tab cookie store.');
+
   let partitionKey = null;
-  if (chrome.cookies.getPartitionKey && tab.id != null) {
+  if (chrome.cookies.getPartitionKey) {
     try {
       partitionKey = (await chrome.cookies.getPartitionKey({ tabId: tab.id })).partitionKey || null;
     } catch (_error) {
@@ -122,9 +129,10 @@ async function getCurrentTab() {
     }
   }
   return {
+    id: tab.id,
     url: tab.url,
     domain: url.hostname,
-    cookieStoreId: tab.cookieStoreId || undefined,
+    cookieStoreId: store.id,
     partitionKey
   };
 }
@@ -234,7 +242,7 @@ function renderCookies(cookies) {
 }
 
 async function getCookiesForCurrentTab(query) {
-  const base = { ...query };
+  const base = { ...query, storeId: currentStoreId };
   const unpartitioned = await chrome.cookies.getAll(base);
   const results = [...unpartitioned];
   if (currentPartitionKey && chrome.cookies.getAll) {
@@ -255,12 +263,11 @@ async function loadCookies() {
     const tab = await getCurrentTab();
     currentUrl = tab.url;
     currentDomain = tab.domain;
-    currentStoreId = tab.cookieStoreId || '';
+    currentStoreId = tab.cookieStoreId;
     currentPartitionKey = tab.partitionKey;
     dom.domainLabel.textContent = currentPartitionKey ? `${currentDomain} • partition-aware` : currentDomain;
 
-    const query = currentStoreId ? { storeId: currentStoreId } : {};
-    const cookies = await getCookiesForCurrentTab(query);
+    const cookies = await getCookiesForCurrentTab({});
     allCookies = cookies.filter((cookie) => isCookieForActiveHost(cookie, currentDomain));
     allCookies.sort((a, b) => `${a.name}|${a.path}`.localeCompare(`${b.name}|${b.path}`));
     renderCookies(getFilteredCookies());
@@ -302,6 +309,8 @@ async function upsertCookie({ original, name, value, path, secure, httpOnly, sam
       ? original.domain.replace(/^\./, '')
       : (domain ? domain.replace(/^\./, '') : currentDomain);
     const cookieUrl = getCookieUrl({ protocol, domain: domainForUrl, path: normalizedPath });
+    const requestedStore = original?.storeId || requestedStoreId || currentStoreId;
+    if (!requestedStore) throw new Error('Unable to resolve the cookie store for this tab.');
     const setDetails = {
       url: cookieUrl,
       name: trimmedName,
@@ -310,7 +319,7 @@ async function upsertCookie({ original, name, value, path, secure, httpOnly, sam
       secure: effectiveSecure,
       httpOnly: effectiveHttpOnly,
       sameSite: effectiveSameSite,
-      storeId: original?.storeId || requestedStoreId || currentStoreId || undefined,
+      storeId: requestedStore,
       ...buildPartitionDetails(effectivePartitionKey)
     };
     if (domain) setDetails.domain = domain;
@@ -435,7 +444,7 @@ async function importCookiesFromJsonText() {
         hostOnly,
         domain: hostOnly ? currentDomain : sourceDomain,
         partitionKey,
-        storeId: currentStoreId || undefined
+        storeId: currentStoreId
       });
       if (saved) importedCount += 1;
       else skippedCount += 1;
