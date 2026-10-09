@@ -16,13 +16,16 @@ if missing:
 # browser integration tests are still needed for real Chrome cookie behavior.
 cookie_regressions = {
     'new/unpartitioned cookies must not inherit the active tab partition':
-        'const effectivePartitionKey = original?.partitionKey || null;' in js
-        and 'cookie.partitionKey || currentPartitionKey || null' not in js,
+        'const effectivePartitionKey = original?.partitionKey || requestedPartitionKey || null;' in js
+        and 'cookie.partitionKey || currentPartitionKey || null' not in js
+        and 'requestedPartitionKey: currentPartitionKey' not in js,
     'unchanged expiration input must preserve the exact original timestamp':
         'const expirationWasEdited = expirationInput.value !== originalExpirationInputValue;' in js
         and ': cookie.expirationDate;' in js,
     'datetime-local values must be formatted in local time':
         all(part in js for part in ['date.getFullYear()', 'date.getMonth()', 'date.getDate()', 'date.getHours()', 'date.getMinutes()']),
+    'cookie imports must not pass synthetic originals for cleanup':
+        'original: {' not in js[js.index('async function importCookiesFromJsonText'):js.index('dom.refreshBtn')],
 }
 failed = [name for name, passed in cookie_regressions.items() if not passed]
 if failed:
