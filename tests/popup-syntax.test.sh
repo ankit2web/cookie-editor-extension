@@ -17,6 +17,8 @@ if missing:
 import re
 upsert = js[js.index('async function upsertCookie'):js.index('async function deleteCookie')]
 tab_lookup = js[js.index('async function getCurrentTab'):js.index('function toExportableCookie')]
+get_all = js[js.index('async function getCookiesForCurrentTab'):js.index('async function loadCookies')]
+import_cookies = js[js.index('async function importCookiesFromJsonText'):js.index('dom.refreshBtn')]
 expiration_input_assignment = re.search(r'expirationInput\.value\s*=\s*[^;\n]*toISOString', js)
 partition_assignment = re.search(r'const effectivePartitionKey\s*=\s*([^;]+);', upsert)
 cookie_regressions = {
@@ -33,16 +35,19 @@ cookie_regressions = {
         and 'const originalExpirationInputValue = cookie.expirationDate ? formatLocalDateTime(cookie.expirationDate) : \'\';' in js
         and expiration_input_assignment is None,
     'cookie imports must not pass synthetic originals for cleanup':
-        'original: {' not in js[js.index('async function importCookiesFromJsonText'):js.index('dom.refreshBtn')],
+        'original: {' not in import_cookies,
     'active tab cookie store must be resolved from store tab IDs':
         'chrome.cookies.getAllCookieStores()' in tab_lookup
         and 'stores.find((candidate) => candidate.tabIds.includes(tab.id))' in tab_lookup
         and 'storeId: store.id' in tab_lookup
         and 'tab.cookieStoreId' not in tab_lookup,
     'cookie reads and imports must use the resolved store explicitly':
-        'const base = { ...query, storeId: currentStoreId };' in js
-        and 'storeId: currentStoreId' in js
-        and 'storeId: requestedStore,' in js,
+        'const base = { ...query, storeId: currentStoreId };' in get_all
+        and 'chrome.cookies.getAll(base)' in get_all
+        and 'chrome.cookies.getAll({ ...base, partitionKey: currentPartitionKey })' in get_all
+        and 'storeId: requestedStore,' in upsert
+        and 'chrome.cookies.set(setDetails)' in upsert
+        and 'storeId: currentStoreId' in import_cookies,
 }
 failed = [name for name, passed in cookie_regressions.items() if not passed]
 if failed:
