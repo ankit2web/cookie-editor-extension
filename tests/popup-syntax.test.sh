@@ -17,8 +17,8 @@ if missing:
 import re
 upsert = js[js.index('async function upsertCookie'):js.index('async function deleteCookie')]
 tab_lookup = js[js.index('async function getCurrentTab'):js.index('function toExportableCookie')]
-expiration_input_assignment = re.search(r'expirationInput\\.value\\s*=\\s*[^;\\n]*toISOString', js)
-partition_assignment = re.search(r'const effectivePartitionKey\\s*=\\s*([^;]+);', upsert)
+expiration_input_assignment = re.search(r'expirationInput\.value\s*=\s*[^;\n]*toISOString', js)
+partition_assignment = re.search(r'const effectivePartitionKey\s*=\s*([^;]+);', upsert)
 cookie_regressions = {
     'new cookies must not inherit the active tab partition':
         partition_assignment is not None
