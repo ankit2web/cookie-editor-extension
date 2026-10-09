@@ -317,7 +317,7 @@ async function upsertCookie({ original, name, value, path, secure, httpOnly, sam
     const savedCookie = await chrome.cookies.set(setDetails);
     if (!savedCookie) throw new Error('Browser rejected the cookie update.');
 
-    if (original && cookieIdentity(original) !== cookieIdentity(savedCookie)) {
+    if (original && !original.synthetic && cookieIdentity(original) !== cookieIdentity(savedCookie)) {
       await chrome.cookies.remove({
         url: getCookieRemovalUrl(original),
         name: original.name,
@@ -432,7 +432,8 @@ async function importCookiesFromJsonText() {
           hostOnly,
           domain: hostOnly ? currentDomain : sourceDomain,
           storeId: currentStoreId || undefined,
-          partitionKey
+          partitionKey,
+          synthetic: true
         },
         name: cookie.name,
         value: cookie.value == null ? '' : String(cookie.value),
