@@ -132,7 +132,7 @@ async function getCurrentTab() {
     id: tab.id,
     url: tab.url,
     domain: url.hostname,
-    cookieStoreId: store.id,
+    storeId: store.id,
     partitionKey
   };
 }
@@ -263,7 +263,7 @@ async function loadCookies() {
     const tab = await getCurrentTab();
     currentUrl = tab.url;
     currentDomain = tab.domain;
-    currentStoreId = tab.cookieStoreId;
+    currentStoreId = tab.storeId;
     currentPartitionKey = tab.partitionKey;
     dom.domainLabel.textContent = currentPartitionKey ? `${currentDomain} • partition-aware` : currentDomain;
 
