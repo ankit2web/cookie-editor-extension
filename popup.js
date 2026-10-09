@@ -170,7 +170,6 @@ function formatCookieMeta(cookie) {
   return `${cookie.domain} • ${cookie.path} • ${cookie.sameSite || 'unspecified'} • ${cookie.secure ? 'Secure' : 'Not secure'} • ${cookie.httpOnly ? 'HttpOnly' : 'JS-accessible'} • ${expiration}${partitioned}`;
 }
 
-
 function updateStats() {
   dom.cookieCount.textContent = String(allCookies.length);
   dom.secureCount.textContent = String(allCookies.filter((cookie) => cookie.secure).length);
@@ -273,18 +272,20 @@ async function loadCookies() {
   }
 }
 
-async function upsertCookie({ original, name, value, path, secure, httpOnly, sameSite, expirationDate }) {
+async function upsertCookie({ original, name, value, path, secure, httpOnly, sameSite, expirationDate, domain: requestedDomain, hostOnly: requestedHostOnly = true, partitionKey: requestedPartitionKey = null, storeId: requestedStoreId }) {
   try {
     const trimmedName = String(name || '').trim();
     const normalizedPath = normalizePath(path);
-    const effectiveSecure = original ? Boolean(secure) : Boolean(secure);
-    const effectiveHttpOnly = original ? Boolean(httpOnly) : Boolean(httpOnly);
+    const effectiveSecure = Boolean(secure);
+    const effectiveHttpOnly = Boolean(httpOnly);
     const effectiveSameSite = sameSite || 'unspecified';
-    // Only preserve partitioning for an already-partitioned cookie. The active tab's
-    // partition key must not silently convert ordinary cookies into partitioned cookies.
-    const effectivePartitionKey = original?.partitionKey || null;
-    const hostOnly = original ? Boolean(original.hostOnly) : true;
-    const domain = original && !original.hostOnly ? original.domain : undefined;
+    // Only preserve partitioning for an already-partitioned cookie, or use an explicitly
+    // imported partition key. The active tab's partition key must never be inferred.
+    const effectivePartitionKey = original?.partitionKey || requestedPartitionKey || null;
+    const hostOnly = original ? Boolean(original.hostOnly) : Boolean(requestedHostOnly);
+    const domain = original
+      ? (original.hostOnly ? undefined : original.domain)
+      : (hostOnly ? undefined : requestedDomain);
 
     validateCookieAttributes({
       name: trimmedName,
@@ -297,7 +298,9 @@ async function upsertCookie({ original, name, value, path, secure, httpOnly, sam
     });
 
     const protocol = effectiveSecure ? 'https:' : new URL(currentUrl).protocol;
-    const domainForUrl = original?.domain ? original.domain.replace(/^\./, '') : currentDomain;
+    const domainForUrl = original?.domain
+      ? original.domain.replace(/^\./, '')
+      : (domain ? domain.replace(/^\./, '') : currentDomain);
     const cookieUrl = getCookieUrl({ protocol, domain: domainForUrl, path: normalizedPath });
     const setDetails = {
       url: cookieUrl,
@@ -307,7 +310,7 @@ async function upsertCookie({ original, name, value, path, secure, httpOnly, sam
       secure: effectiveSecure,
       httpOnly: effectiveHttpOnly,
       sameSite: effectiveSameSite,
-      storeId: original?.storeId || currentStoreId || undefined,
+      storeId: original?.storeId || requestedStoreId || currentStoreId || undefined,
       ...buildPartitionDetails(effectivePartitionKey)
     };
     if (domain) setDetails.domain = domain;
@@ -317,7 +320,7 @@ async function upsertCookie({ original, name, value, path, secure, httpOnly, sam
     const savedCookie = await chrome.cookies.set(setDetails);
     if (!savedCookie) throw new Error('Browser rejected the cookie update.');
 
-    if (original && !original.synthetic && cookieIdentity(original) !== cookieIdentity(savedCookie)) {
+    if (original && cookieIdentity(original) !== cookieIdentity(savedCookie)) {
       await chrome.cookies.remove({
         url: getCookieRemovalUrl(original),
         name: original.name,
@@ -422,26 +425,17 @@ async function importCookiesFromJsonText() {
       }
 
       const saved = await upsertCookie({
-        original: {
-          name: cookie.name.trim(),
-          path: normalizePath(cookie.path),
-          secure: Boolean(cookie.secure),
-          httpOnly: Boolean(cookie.httpOnly),
-          sameSite: cookie.sameSite || 'unspecified',
-          expirationDate: cookie.expirationDate,
-          hostOnly,
-          domain: hostOnly ? currentDomain : sourceDomain,
-          storeId: currentStoreId || undefined,
-          partitionKey,
-          synthetic: true
-        },
         name: cookie.name,
         value: cookie.value == null ? '' : String(cookie.value),
         path: cookie.path,
         secure: Boolean(cookie.secure),
         httpOnly: Boolean(cookie.httpOnly),
         sameSite: cookie.sameSite || 'unspecified',
-        expirationDate: typeof cookie.expirationDate === 'number' ? cookie.expirationDate : undefined
+        expirationDate: typeof cookie.expirationDate === 'number' ? cookie.expirationDate : undefined,
+        hostOnly,
+        domain: hostOnly ? currentDomain : sourceDomain,
+        partitionKey,
+        storeId: currentStoreId || undefined
       });
       if (saved) importedCount += 1;
       else skippedCount += 1;
