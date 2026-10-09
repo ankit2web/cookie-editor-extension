@@ -26,6 +26,14 @@ cookie_regressions = {
         all(part in js for part in ['date.getFullYear()', 'date.getMonth()', 'date.getDate()', 'date.getHours()', 'date.getMinutes()']),
     'cookie imports must not pass synthetic originals for cleanup':
         'original: {' not in js[js.index('async function importCookiesFromJsonText'):js.index('dom.refreshBtn')],
+    'active tab cookie store must be resolved from store tab IDs':
+        'chrome.cookies.getAllCookieStores()' in js
+        and 'stores.find((candidate) => candidate.tabIds.includes(tab.id))' in js
+        and 'tab.cookieStoreId || undefined' not in js,
+    'cookie reads and imports must use the resolved store explicitly':
+        'const base = { ...query, storeId: currentStoreId };' in js
+        and 'storeId: currentStoreId' in js
+        and 'storeId: requestedStore,' in js,
 }
 failed = [name for name, passed in cookie_regressions.items() if not passed]
 if failed:
