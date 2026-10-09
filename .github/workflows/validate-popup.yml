@@ -29,5 +29,7 @@ jobs:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
       - name: Validate popup and cookie regression guards
         run: bash tests/popup-syntax.test.sh
