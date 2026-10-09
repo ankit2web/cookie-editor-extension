@@ -7,6 +7,7 @@ on:
     paths:
       - 'manifest.json'
       - '.github/workflows/publish-extension.yml'
+      - '.github/workflows/validate-extension-version.yml'
       - 'scripts/validate-manifest-version.sh'
       - 'tests/validate-manifest-version.test.sh'
   pull_request:
