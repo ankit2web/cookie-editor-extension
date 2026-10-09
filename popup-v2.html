@@ -1,0 +1,23 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>CookieEdit++</title>
+    <link rel="stylesheet" href="popup-v2.css" />
+  </head>
+  <body>
+    <main class="app">
+      <header class="app-header">
+        <div class="brand-row"><div><p class="eyebrow">BROWSER TOOL</p><h1>CookieEdit<span>++</span></h1></div><button id="refreshBtn" class="icon-button" type="button" aria-label="Refresh cookies">↻</button></div>
+        <div class="domain-pill"><span class="dot"></span><span id="domainLabel">Loading current tab...</span></div>
+      </header>
+      <section class="stats" aria-label="Cookie summary"><div class="stat-card"><strong id="cookieCount">0</strong><span>Cookies</span></div><div class="stat-card"><strong id="secureCount">0</strong><span>Secure</span></div><div class="stat-card"><strong id="sessionCount">0</strong><span>Session</span></div></section>
+      <section class="panel add-panel"><div class="section-heading"><div><p class="eyebrow">CREATE</p><h2>Add cookie</h2></div><span class="hint">Active site only</span></div><form id="addCookieForm" class="form-grid"><label class="span-2">Name<input id="newName" name="name" required placeholder="session_id" autocomplete="off" /></label><label class="span-2">Value<input id="newValue" name="value" placeholder="cookie value" autocomplete="off" /></label><label>Path<input id="newPath" name="path" value="/" /></label><label>SameSite<select id="newSameSite" name="sameSite"><option value="unspecified">Unspecified</option><option value="lax">Lax</option><option value="strict">Strict</option><option value="no_restriction">None</option></select></label><label>Expires<input id="newExpiration" name="expiration" type="datetime-local" /></label><div class="checks"><label class="check"><input id="newSecure" type="checkbox" /> Secure</label><label class="check"><input id="newHttpOnly" type="checkbox" /> HttpOnly</label></div><button class="primary span-2" type="submit">Add cookie</button></form></section>
+      <section class="panel cookie-panel"><div class="section-heading list-heading"><div><p class="eyebrow">MANAGE</p><h2>Cookies</h2></div><button id="deleteAllBtn" class="danger ghost-button" type="button">Delete visible</button></div><label class="search-box" for="searchInput"><span>⌕</span><input id="searchInput" type="search" placeholder="Search name, value, path..." /></label><p id="status" class="status" role="status" aria-live="polite"></p><ul id="cookieList" class="cookie-list"></ul></section>
+      <details class="panel tools-panel"><summary><span><strong>Import / Export</strong><small>Move cookies as JSON</small></span><span class="chevron">›</span></summary><div class="tools-content"><div class="actions-inline"><button id="exportJsonBtn" type="button">Export JSON</button><button id="importJsonBtn" type="button">Import JSON</button></div><textarea id="jsonTextarea" class="json-textarea" rows="7" placeholder='Paste [{"name":"key","value":"value","path":"/"}] or {"cookies":[...]}'></textarea><p class="footnote">Imports are restricted to the active site to prevent accidental cross-domain changes.</p></div></details>
+    </main>
+    <template id="cookieItemTemplate"><li class="cookie-item"><div class="cookie-topline"><div class="cookie-title"><span class="cookie-dot"></span><strong class="cookie-name-display"></strong></div><span class="partition-badge" hidden>PARTITIONED</span></div><label>Name<input class="cookie-name" autocomplete="off" /></label><label>Value<textarea class="cookie-value" rows="2" spellcheck="false"></textarea></label><div class="form-grid compact"><label>Path<input class="cookie-path" /></label><label>SameSite<select class="cookie-same-site"><option value="unspecified">Unspecified</option><option value="lax">Lax</option><option value="strict">Strict</option><option value="no_restriction">None</option></select></label><label>Expires<input class="cookie-expiration" type="datetime-local" /></label><div class="checks"><label class="check"><input class="cookie-secure" type="checkbox" /> Secure</label><label class="check"><input class="cookie-http-only" type="checkbox" /> HttpOnly</label></div></div><div class="cookie-meta"></div><div class="cookie-actions"><button class="save-btn primary" type="button">Save changes</button><button class="delete-btn danger ghost-button" type="button">Delete</button></div></li></template>
+    <script src="popup.js"></script>
+  </body>
+</html>
