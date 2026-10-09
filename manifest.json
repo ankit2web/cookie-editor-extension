@@ -12,7 +12,7 @@
     "<all_urls>"
   ],
   "action": {
-    "default_popup": "popup.html",
+    "default_popup": "popup-v2.html",
     "default_title": "CookieEdit++",
     "default_icon": {
       "16": "icons/cookieedit.svg",
