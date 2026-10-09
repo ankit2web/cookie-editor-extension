@@ -1,0 +1,35 @@
+name: Validate popup implementation
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'manifest.json'
+      - 'popup.js'
+      - 'popup-v2.html'
+      - 'popup-v2.css'
+      - 'tests/popup-syntax.test.sh'
+      - '.github/workflows/validate-popup.yml'
+  pull_request:
+    paths:
+      - 'manifest.json'
+      - 'popup.js'
+      - 'popup-v2.html'
+      - 'popup-v2.css'
+      - 'tests/popup-syntax.test.sh'
+      - '.github/workflows/validate-popup.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-popup:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+      - name: Validate popup and cookie regression guards
+        run: bash tests/popup-syntax.test.sh
