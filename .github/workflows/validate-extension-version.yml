@@ -1,0 +1,33 @@
+name: Validate extension manifest version
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - 'manifest.json'
+      - '.github/workflows/publish-extension.yml'
+      - '.github/workflows/validate-extension-version.yml'
+      - 'scripts/validate-manifest-version.sh'
+      - 'tests/validate-manifest-version.test.sh'
+  pull_request:
+    paths:
+      - 'manifest.json'
+      - '.github/workflows/validate-extension-version.yml'
+      - '.github/workflows/publish-extension.yml'
+      - 'scripts/validate-manifest-version.sh'
+      - 'tests/validate-manifest-version.test.sh'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate-version:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Validate manifest version
+        run: bash scripts/validate-manifest-version.sh manifest.json
+      - name: Test version validator
+        run: bash tests/validate-manifest-version.test.sh
