@@ -208,12 +208,16 @@ function renderCookies(cookies) {
     secureInput.checked = cookie.secure;
     httpOnlyInput.checked = cookie.httpOnly;
     sameSiteInput.value = cookie.sameSite || 'unspecified';
-    expirationInput.value = cookie.expirationDate ? formatLocalDateTime(cookie.expirationDate) : '';
+    const originalExpirationInputValue = cookie.expirationDate ? formatLocalDateTime(cookie.expirationDate) : '';
+    expirationInput.value = originalExpirationInputValue;
     meta.textContent = formatCookieMeta(cookie);
     item.dataset.cookieKey = cookieIdentity(cookie);
 
     saveBtn.addEventListener('click', async () => {
-      const expirationDate = expirationInput.value ? Math.floor(new Date(expirationInput.value).getTime() / 1000) : undefined;
+      const expirationWasEdited = expirationInput.value !== originalExpirationInputValue;
+      const expirationDate = expirationWasEdited
+        ? (expirationInput.value ? Math.floor(new Date(expirationInput.value).getTime() / 1000) : undefined)
+        : cookie.expirationDate;
       await upsertCookie({
         original: cookie,
         name: nameInput.value,
@@ -409,8 +413,10 @@ async function importCookiesFromJsonText() {
       }
 
       const hostOnly = cookie.hostOnly !== false;
-      const partitionKey = cookie.partitionKey || currentPartitionKey || null;
-      if (partitionKey && currentPartitionKey && JSON.stringify(partitionKey) !== JSON.stringify(currentPartitionKey)) {
+      // Never infer partitioning from the active tab. Import only an explicitly
+      // exported partition key, and only when it matches this tab's partition.
+      const partitionKey = cookie.partitionKey || null;
+      if (partitionKey && (!currentPartitionKey || JSON.stringify(partitionKey) !== JSON.stringify(currentPartitionKey))) {
         skippedCount += 1;
         continue;
       }
