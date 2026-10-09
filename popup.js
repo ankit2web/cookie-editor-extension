@@ -179,9 +179,18 @@ function formatCookieMeta(cookie) {
 }
 
 function updateStats() {
+  if (!dom.cookieCount || !dom.secureCount || !dom.sessionCount) {
+    console.warn('Cookie stats elements are missing from the popup.');
+    return;
+  }
+
   dom.cookieCount.textContent = String(allCookies.length);
-  dom.secureCount.textContent = String(allCookies.filter((cookie) => cookie.secure).length);
-  dom.sessionCount.textContent = String(allCookies.filter((cookie) => cookie.session).length);
+  dom.secureCount.textContent = String(
+    allCookies.filter((cookie) => cookie.secure).length
+  );
+  dom.sessionCount.textContent = String(
+    allCookies.filter((cookie) => cookie.session).length
+  );
 }
 
 function renderCookies(cookies) {
