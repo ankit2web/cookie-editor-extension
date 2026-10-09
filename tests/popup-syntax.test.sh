@@ -14,22 +14,31 @@ if missing:
 
 # Regression guards for bugs found in review. These are source-level guards;
 # browser integration tests are still needed for real Chrome cookie behavior.
+import re
+upsert = js[js.index('async function upsertCookie'):js.index('async function deleteCookie')]
+tab_lookup = js[js.index('async function getCurrentTab'):js.index('function toExportableCookie')]
+expiration_input_assignment = re.search(r'expirationInput\\.value\\s*=\\s*[^;\\n]*toISOString', js)
+partition_assignment = re.search(r'const effectivePartitionKey\\s*=\\s*([^;]+);', upsert)
 cookie_regressions = {
-    'new/unpartitioned cookies must not inherit the active tab partition':
-        'const effectivePartitionKey = original?.partitionKey || requestedPartitionKey || null;' in js
-        and 'cookie.partitionKey || currentPartitionKey || null' not in js
-        and 'requestedPartitionKey: currentPartitionKey' not in js,
+    'new cookies must not inherit the active tab partition':
+        partition_assignment is not None
+        and 'currentPartitionKey' not in partition_assignment.group(1)
+        and 'original' in partition_assignment.group(1)
+        and 'requestedPartitionKey' in partition_assignment.group(1),
     'unchanged expiration input must preserve the exact original timestamp':
         'const expirationWasEdited = expirationInput.value !== originalExpirationInputValue;' in js
         and ': cookie.expirationDate;' in js,
     'datetime-local values must be formatted in local time':
-        all(part in js for part in ['date.getFullYear()', 'date.getMonth()', 'date.getDate()', 'date.getHours()', 'date.getMinutes()']),
+        'function formatLocalDateTime(timestampSeconds)' in js
+        and 'const originalExpirationInputValue = cookie.expirationDate ? formatLocalDateTime(cookie.expirationDate) : \'\';' in js
+        and expiration_input_assignment is None,
     'cookie imports must not pass synthetic originals for cleanup':
         'original: {' not in js[js.index('async function importCookiesFromJsonText'):js.index('dom.refreshBtn')],
     'active tab cookie store must be resolved from store tab IDs':
-        'chrome.cookies.getAllCookieStores()' in js
-        and 'stores.find((candidate) => candidate.tabIds.includes(tab.id))' in js
-        and 'tab.cookieStoreId || undefined' not in js,
+        'chrome.cookies.getAllCookieStores()' in tab_lookup
+        and 'stores.find((candidate) => candidate.tabIds.includes(tab.id))' in tab_lookup
+        and 'storeId: store.id' in tab_lookup
+        and 'tab.cookieStoreId' not in tab_lookup,
     'cookie reads and imports must use the resolved store explicitly':
         'const base = { ...query, storeId: currentStoreId };' in js
         and 'storeId: currentStoreId' in js
